@@ -242,7 +242,9 @@ canvas{display:block}
   <h2>⚔️ Chơi mạng (PvP)</h2>
   <div class="sub">Đấu rìu với bạn qua kết nối P2P. Một người tạo phòng, người kia nhập mã.</div>
   <div id="mp-idle">
-    <div class="sub">Chọn chế độ để tạo phòng:</div>
+    <div class="sub">👤 Nhập tên của bạn trước khi vào phòng:</div>
+    <input id="mp-name-input" placeholder="Tên hiển thị (tối đa 14 ký tự)" maxlength="14" autocomplete="off" spellcheck="false">
+    <div class="sub" style="margin-top:8px">Rồi chọn chế độ để tạo phòng:</div>
     <button class="btn" id="mp-host-1v1">⚔️ Tạo phòng 1v1 (2 người)</button>
     <button class="btn" id="mp-host-room">👥 Tạo phòng đông (tối đa 16)</button>
     <button class="btn alt" id="mp-join-show">🔑 Nhập mã để vào phòng</button>
@@ -258,7 +260,9 @@ canvas{display:block}
     <div class="note" style="margin-top:6px">Đang chờ người chơi kết nối… Giữ tab này mở.</div>
   </div>
   <div id="mp-joining" style="display:none">
-    <div class="sub">Dán/nhập mã phòng mà người tạo phòng gửi cho bạn:</div>
+    <div class="sub">👤 Tên của bạn:</div>
+    <input id="mp-name-input2" placeholder="Tên hiển thị (tối đa 14 ký tự)" maxlength="14" autocomplete="off" spellcheck="false">
+    <div class="sub" style="margin-top:8px">Dán/nhập mã phòng mà người tạo phòng gửi cho bạn:</div>
     <input id="mp-code-input" placeholder="VD: ABC123" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <button class="btn" id="mp-join-go">🚪 Vào phòng</button>
     <button class="btn" id="mp-retry" style="display:none;background:#c47f2a">🔄 Thử lại</button>
@@ -2974,8 +2978,25 @@ function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'
 document.getElementById('mp-btn').addEventListener('click',()=>{
   const wasOn=mpPanel.classList.contains('on');
   closeAllPanels();
-  if(!wasOn)mpPanel.classList.add('on');
+  if(!wasOn){
+    mpPanel.classList.add('on');
+    // luôn về màn hình đầu (đặt tên + chọn chế độ) và điền sẵn tên hiện tại
+    document.getElementById('mp-idle').style.display='block';
+    document.getElementById('mp-hosting').style.display='none';
+    document.getElementById('mp-joining').style.display='none';
+    const ni=document.getElementById('mp-name-input');
+    if(ni){ni.value=(Me.name&&Me.name!=='Bạn')?Me.name:'';setTimeout(()=>ni.focus(),80)}
+    mpMsg('');
+  }
 });
+// bắt buộc đặt tên trước khi vào server: đọc ô tên, lưu lại, chặn nếu bỏ trống
+function ensureMpName(){
+  const ni=document.getElementById('mp-name-input');
+  const v=(ni&&ni.value||'').trim();
+  if(!v){mpMsg('⚠️ Hãy nhập tên của bạn trước khi vào phòng!');if(ni)ni.focus();return !1}
+  applyName(v);
+  return !0;
+}
 // ============== WEBSOCKET TRANSPORT (Cloudflare server) ==============
 // Connect to  wss://<server>/room/<CODE>?m=r|1&name=...  . The server assigns
 // our id (via 'welcome'), relays every message, and owns roster + waiting queue.
@@ -3049,11 +3070,13 @@ function startHosting(asRoom){
     wireConn(c,!0);
   });
 }
-document.getElementById('mp-host-1v1').addEventListener('click',()=>startHosting(!1));
-document.getElementById('mp-host-room').addEventListener('click',()=>startHosting(!0));
+document.getElementById('mp-host-1v1').addEventListener('click',()=>{if(ensureMpName())startHosting(!1)});
+document.getElementById('mp-host-room').addEventListener('click',()=>{if(ensureMpName())startHosting(!0)});
 document.getElementById('mp-join-show').addEventListener('click',()=>{
+  if(!ensureMpName())return;
   document.getElementById('mp-idle').style.display='none';
   document.getElementById('mp-joining').style.display='block';
+  const n2=document.getElementById('mp-name-input2');if(n2)n2.value=Me.name;   // đồng bộ tên đã nhập
   const inp=document.getElementById('mp-code-input');
   inp.value='';inp.focus();
 });
@@ -3116,6 +3139,10 @@ document.getElementById('mp-retry').addEventListener('click',()=>{
   if(lastJoin)joinRoom(lastJoin.code,lastJoin.asRoom);
 });
 document.getElementById('mp-join-go').addEventListener('click',()=>{
+  const ni=document.getElementById('mp-name-input2');
+  const v=(ni&&ni.value||'').trim();
+  if(!v){mpMsg('⚠️ Hãy nhập tên của bạn trước khi vào phòng!');if(ni)ni.focus();return}
+  applyName(v);
   joinRoom(document.getElementById('mp-code-input').value,roomMode);
 });
 addEventListener('beforeunload',()=>{try{if(netMode==='ws'){if(ws)ws.close()}else broadcast({t:'bye',id:Me.id})}catch(e){}});
@@ -3453,10 +3480,18 @@ addEventListener('beforeunload',saveProgress);
   const {code,room}=roomFromUrl();
   if(!code)return;
   closeAllPanels();mpPanel.classList.add('on');
+  // yêu cầu đặt tên trước khi vào — nếu chưa có tên, dừng ở màn nhập tên/mã
   document.getElementById('mp-idle').style.display='none';
   document.getElementById('mp-joining').style.display='block';
   const inp=document.getElementById('mp-code-input');
   if(inp)inp.value=code;
+  const n2=document.getElementById('mp-name-input2');
+  if(n2)n2.value=(Me.name&&Me.name!=='Bạn')?Me.name:'';
+  if(!Me.name||Me.name==='Bạn'){
+    mpMsg('👤 Nhập tên của bạn rồi bấm "🚪 Vào phòng" để vào '+code);
+    if(n2)setTimeout(()=>n2.focus(),80);
+    return;
+  }
   mpMsg('🔗 Vào phòng từ link mời: '+code);
   joinRoom(code,room);
 })();
