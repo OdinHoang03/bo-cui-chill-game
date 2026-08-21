@@ -200,7 +200,7 @@ canvas{display:block}
     <button class="btn alt" id="mp-back">← Quay lại</button>
   </div>
   <div id="mp-msg" class="note" style="margin-top:8px"></div>
-  <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → nhận <b>link mời</b> hoặc mã.<br>2. Gửi link/mã cho người kia (Zalo/Messenger…).<br>3. Người kia <b>bấm link</b> để vào thẳng, hoặc <b>Nhập mã</b> rồi bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ áo đỏ — lại gần và vung rìu để đánh nhau!</div>
+  <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → nhận <b>link mời</b> hoặc mã.<br>2. Gửi link/mã cho người kia (Zalo/Messenger…).<br>3. Người kia <b>bấm link</b> để vào thẳng, hoặc <b>Nhập mã</b> rồi bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ — lại gần và vung rìu để đánh nhau!<br><span style="opacity:.8">⚠️ Khác WiFi/4G có thể mất ~10s để kết nối. Nếu mãi không vào được, một số WiFi trường/công ty chặn P2P — hãy thử chuyển sang <b>4G/5G</b>.</span></div>
   <div class="note" style="margin-top:8px">⚠️ Dùng broker công khai miễn phí của PeerJS. Nếu mạng có NAT/firewall chặt, kết nối có thể thất bại — thử lại hoặc đổi mạng.</div>
 </div>
 <div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
@@ -1734,11 +1734,27 @@ function roomFromUrl(){
   if(!mode)mode=q.get('m')||'';
   return {code:code.trim().toUpperCase(),room:mode==='r'};
 }
+// ICE servers: STUN alone fails when a player is behind a strict/symmetric NAT
+// (mobile 4G/5G, school/office WiFi). TURN relays the traffic in that case so
+// players on completely different networks can still connect.
+const ICE_SERVERS=[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+  {urls:'stun:global.stun.twilio.com:3478'},
+  // free public TURN relays (used only when direct/STUN fails on strict NATs).
+  // Multiple providers = better odds one is reachable.
+  {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:freeturn.net:3478',username:'free',credential:'free'},
+  {urls:'turns:freeturn.net:5349',username:'free',credential:'free'},
+];
 function ensurePeer(id){
   if(typeof Peer==='undefined'){mpMsg('❌ Không tải được PeerJS (kiểm tra mạng).');return null}
-  peer=id?new Peer(PEER_PREFIX+id):new Peer();
+  const opts={config:{iceServers:ICE_SERVERS,iceCandidatePoolSize:4}};
+  peer=id?new Peer(PEER_PREFIX+id,opts):new Peer(opts);
   peer.on('error',e=>{
-    mpMsg('❌ Lỗi: '+(e.type==='unavailable-id'?'Mã phòng đã có người dùng, thử tạo lại.':e.type));
+    mpMsg('❌ Lỗi: '+(e.type==='unavailable-id'?'Mã phòng đã có người dùng, thử tạo lại.':(e.type==='peer-unavailable'?'Không tìm thấy phòng (mã sai hoặc host đã thoát).':e.type)));
     setNet('🔌 Lỗi kết nối',!0);
   });
   return peer;
@@ -2013,16 +2029,27 @@ document.getElementById('mp-code-input').addEventListener('input',e=>{
   e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
 });
 // join a room by code (manual entry or invite link). asRoom hint from the link.
+let joinTimer=null;
 function joinRoom(code,asRoom){
   code=(code||'').trim().toUpperCase();
   if(code.length<4){mpMsg('⚠️ Mã phòng không hợp lệ.');return}
   roomMode=!!asRoom;                    // provisional; host confirms via 'welcome'
-  mpMsg('Đang kết nối tới '+code+'…');setNet('🟡 Đang kết nối…',!0);netRole='guest';
+  mpMsg('Đang kết nối tới '+code+'… (có thể mất ~10s nếu khác mạng)');setNet('🟡 Đang kết nối…',!0);netRole='guest';
   const p=ensurePeer(null);if(!p)return;
+  clearTimeout(joinTimer);
+  // if nothing connected within 20s, the two networks likely can't reach each other
+  joinTimer=setTimeout(()=>{
+    if(!netConnected()){
+      mpMsg('❌ Không kết nối được. Thử lại, kiểm tra mã, hoặc dùng 4G nếu WiFi chặn P2P.');
+      setNet('🔌 Kết nối thất bại',!0);
+      try{p.destroy()}catch(e){}
+    }
+  },20000);
   p.on('open',id=>{
     Me.id=id;
     const c=p.connect(PEER_PREFIX+code,{reliable:!0,metadata:{name:Me.name}});
-    c.on('data',d=>{ if(d&&d.t==='full'){mpMsg('❌ Phòng đã đầy.');setNet('🔌 Phòng đầy',!0)} });
+    c.on('open',()=>clearTimeout(joinTimer));
+    c.on('data',d=>{ if(d&&d.t==='full'){clearTimeout(joinTimer);mpMsg('❌ Phòng đã đầy.');setNet('🔌 Phòng đầy',!0)} });
     wireConn(c,!1);
   });
 }
