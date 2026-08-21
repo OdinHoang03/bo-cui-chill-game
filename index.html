@@ -292,6 +292,17 @@ class AE{
   _br(){[0,.03,.06].forEach(dl=>{const t=this.ctx.currentTime+dl;const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='sine';const f=1800+Math.random()*1200;o.frequency.setValueAtTime(f,t);o.frequency.linearRampToValueAtTime(f*1.3,t+.05);o.frequency.linearRampToValueAtTime(f*.8,t+.1);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.03,t+.02);g.gain.linearRampToValueAtTime(0,t+.12);o.connect(g);g.connect(this.mg);o.start(t);o.stop(t+.15)})}
   chop(){if(!this.ctx||!this.mOn)return;const t=this.ctx.currentTime;const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(200,t);o.frequency.exponentialRampToValueAtTime(80,t+.08);g.gain.setValueAtTime(.5,t);g.gain.exponentialRampToValueAtTime(.01,t+.1);o.connect(g);g.connect(this.mg);o.start(t);o.stop(t+.12);const b=this.ctx.createBuffer(1,this.ctx.sampleRate*.05,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*.1));const s=this.ctx.createBufferSource(),g2=this.ctx.createGain();s.buffer=b;g2.gain.setValueAtTime(.4,t);g2.gain.exponentialRampToValueAtTime(.01,t+.06);s.connect(g2);g2.connect(this.mg);s.start(t)}
   split(){if(!this.ctx||!this.mOn)return;const t=this.ctx.currentTime;const b=this.ctx.createBuffer(1,this.ctx.sampleRate*.25,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*.18))*.85;const s=this.ctx.createBufferSource(),g=this.ctx.createGain(),f=this.ctx.createBiquadFilter();s.buffer=b;g.gain.setValueAtTime(.8,t);g.gain.exponentialRampToValueAtTime(.01,t+.3);f.type='lowpass';f.frequency.setValueAtTime(3e3,t);f.frequency.exponentialRampToValueAtTime(400,t+.25);s.connect(f);f.connect(g);g.connect(this.mg);s.start(t);const o=this.ctx.createOscillator(),g2=this.ctx.createGain();o.type='sine';o.frequency.setValueAtTime(140,t);o.frequency.exponentialRampToValueAtTime(50,t+.2);g2.gain.setValueAtTime(.6,t);g2.gain.exponentialRampToValueAtTime(.01,t+.25);o.connect(g2);g2.connect(this.mg);o.start(t);o.stop(t+.3)}
+  // tiếng gầm khủng long: dải sawtooth trầm quét xuống + méo tiếng + nhiễu grrr
+  roar(){if(!this.ctx||!this.mOn)return;const t=this.ctx.currentTime;
+    [70,90,140].forEach((f0,idx)=>{const o=this.ctx.createOscillator(),g=this.ctx.createGain(),fi=this.ctx.createBiquadFilter();
+      o.type='sawtooth';o.frequency.setValueAtTime(f0*1.4,t);o.frequency.exponentialRampToValueAtTime(f0*.55,t+.9);
+      const lfo=this.ctx.createOscillator(),lg=this.ctx.createGain();lfo.type='sine';lfo.frequency.value=18+idx*6;lg.gain.value=f0*.35;lfo.connect(lg);lg.connect(o.frequency);lfo.start(t);lfo.stop(t+1.1);
+      fi.type='lowpass';fi.frequency.setValueAtTime(1400,t);fi.frequency.exponentialRampToValueAtTime(500,t+.9);
+      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.5/(idx+1),t+.08);g.gain.setValueAtTime(.5/(idx+1),t+.6);g.gain.exponentialRampToValueAtTime(.01,t+1.1);
+      o.connect(fi);fi.connect(g);g.connect(this.mg);o.start(t);o.stop(t+1.15)});
+    // lớp nhiễu gằn
+    const b=this.ctx.createBuffer(1,this.ctx.sampleRate*1,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.min(1,i/(this.ctx.sampleRate*.1))*Math.max(0,1-i/d.length)*.5;
+    const s=this.ctx.createBufferSource(),g=this.ctx.createGain(),f=this.ctx.createBiquadFilter();s.buffer=b;f.type='bandpass';f.frequency.value=600;g.gain.value=.25;s.connect(f);f.connect(g);g.connect(this.mg);s.start(t)}
 }
 const audio=new AE();
 // ============== GAME STATE ==============
@@ -1420,6 +1431,8 @@ function landHit(){
 
   // ===== PvP FIRST: a swing that reaches the opponent hits THEM instead =====
   if(tryHitOpponent(baseDamage(),chg))return;
+  // ===== BOSS: nếu khủng long trong tầm & trước mặt, bổ vào nó =====
+  if(tryHitBoss(baseDamage(),chg))return;
 
   if(chopTarget.type==='tree'){
     // ===== chopping a forest tree =====
@@ -2188,7 +2201,7 @@ function bombBlast(){
 // ---- gây sát thương lên đối thủ trong vùng (dùng cho kỹ năng vũ khí) ----
 // pred(p, dx, dz, dist) -> true nếu đối thủ p bị trúng. tag hiện trong kill feed.
 function dealAreaDamage(dmg,pred,tag,knockback){
-  if(!netConnected())return 0;
+  if(!netConnected())return dealAreaDamageBoss(dmg,pred,tag);
   let hits=0;
   for(const p of activePeers()){
     if(p.st.dead)continue;
@@ -2206,8 +2219,264 @@ function dealAreaDamage(dmg,pred,tag,knockback){
       spawnItemDrop(p.av.grp.position.x,p.av.grp.position.z,!0);
     }
   }
+  // kỹ năng AoE cũng đánh trúng boss nếu nó trong vùng
+  if(Boss.active){
+    const dx=Boss.grp.position.x-guy.position.x, dz=Boss.grp.position.z-guy.position.z;
+    const dist=Math.hypot(dx,dz);
+    if(pred({st:{}},dx,dz,dist)){const crit=Math.random()<critChance();hitBoss(Math.round(dmg*(crit?2:1)),crit);hits++;}
+  }
   if(hits)lastCombat=performance.now();
   return hits;
+}
+// khi chơi offline (chưa nối mạng): kỹ năng AoE chỉ có thể trúng boss
+function dealAreaDamageBoss(dmg,pred,tag){
+  if(!Boss.active)return 0;
+  const dx=Boss.grp.position.x-guy.position.x, dz=Boss.grp.position.z-guy.position.z;
+  const dist=Math.hypot(dx,dz);
+  if(!pred({st:{}},dx,dz,dist))return 0;
+  const crit=Math.random()<critChance();hitBoss(Math.round(dmg*(crit?2:1)),crit);return 1;
+}
+// Sau vài phút, một con khủng long khổng lồ xuất hiện, đuổi và cắn người chơi.
+// Cả phòng cùng nhau đánh nó. HOST (hoặc người chơi đơn khi offline) là bên
+// QUYỀN LỰC: chạy AI + máu boss rồi đồng bộ qua net ('boss'); người khác gửi
+// 'bossHit' về host khi đánh trúng. Đòn boss đánh trúng người chơi dùng lại
+// kênh 'hit' sẵn có. Hạ boss → cả phòng nhận thưởng lớn.
+const BOSS_FIRST=180;        // lần đầu xuất hiện sau 3 phút
+const BOSS_RESPAWN=150;      // tái xuất sau khi bị hạ
+const BOSS_BITE_RANGE=3.6;   // tầm cắn
+const BOSS_SPEED=2.6;        // tốc độ đuổi
+const Boss={active:!1,grp:null,head:null,jaw:null,legL:null,legR:null,armL:null,armR:null,tail:[],eyeMats:[],
+  hp:0,hpMax:0,x:0,z:0,yaw:0,tx:0,tz:0,tyaw:0,timer:BOSS_FIRST,warned:!1,
+  attackCd:0,anim:0,animT:0,biteSeq:0,lastBiteSeq:0,bitDone:!1,walk:0,spawnFx:0};
+function bossAuthority(){return !netConnected()||netRole==='host'}
+function makeBossModel(){
+  const g=new T.Group();
+  const scale=1.0;
+  const skinM=new T.MeshStandardMaterial({color:0x3f6b3a,roughness:.85,metalness:.05});
+  const bellyM=new T.MeshStandardMaterial({color:0xcdd07a,roughness:.9});
+  const clawM=new T.MeshStandardMaterial({color:0xf2ede0,roughness:.5});
+  const toothM=new T.MeshStandardMaterial({color:0xfffaf0,roughness:.4});
+  // thân
+  const body=new T.Mesh(new T.SphereGeometry(1.05,16,12),skinM);body.scale.set(1,.92,1.55);body.position.y=2.2;body.castShadow=!0;g.add(body);
+  const belly=new T.Mesh(new T.SphereGeometry(.85,14,10),bellyM);belly.scale.set(.9,.7,1.4);belly.position.set(0,1.85,.15);g.add(belly);
+  // cổ
+  const neck=new T.Mesh(new T.CylinderGeometry(.5,.72,1.3,12),skinM);neck.position.set(0,2.85,1.05);neck.rotation.x=0.9;neck.castShadow=!0;g.add(neck);
+  // đầu (nhóm riêng để lao khi cắn)
+  const head=new T.Group();head.position.set(0,3.35,1.75);g.add(head);
+  const skull=new T.Mesh(new T.BoxGeometry(.72,.72,1.15),skinM);skull.castShadow=!0;head.add(skull);
+  const snout=new T.Mesh(new T.BoxGeometry(.6,.5,.7),skinM);snout.position.set(0,-.02,.8);head.add(snout);
+  // hàm dưới (mở ra khi cắn)
+  const jaw=new T.Group();jaw.position.set(0,-.32,.35);head.add(jaw);
+  const jawM=new T.Mesh(new T.BoxGeometry(.56,.26,1.05),skinM);jawM.position.set(0,-.02,.5);jaw.add(jawM);
+  // răng
+  for(let i=0;i<6;i++){const tx=-.22+ (i%3)*.22;const tz=.35+Math.floor(i/3)*.5;
+    const tu=new T.Mesh(new T.ConeGeometry(.055,.2,6),toothM);tu.position.set(tx,-.28,tz);head.add(tu);
+    const tl=new T.Mesh(new T.ConeGeometry(.05,.17,6),toothM);tl.rotation.x=Math.PI;tl.position.set(tx,.08,tz);jaw.add(tl);}
+  // mắt phát sáng đỏ
+  const eyeMatL=new T.MeshStandardMaterial({color:0xff2b1a,emissive:0xff2b1a,emissiveIntensity:1.4,roughness:.3});
+  const eyeMatR=eyeMatL.clone();
+  const eL=new T.Mesh(new T.SphereGeometry(.11,10,10),eyeMatL);eL.position.set(-.3,.18,.35);head.add(eL);
+  const eR=new T.Mesh(new T.SphereGeometry(.11,10,10),eyeMatR);eR.position.set(.3,.18,.35);head.add(eR);
+  // đuôi (nhiều đốt thon dần, ngoáy được)
+  const tail=[];let par=g;const seg=6;
+  for(let i=0;i<seg;i++){
+    const t=new T.Group();const r=.55-i*.07;
+    const m=new T.Mesh(new T.SphereGeometry(r,10,8),skinM);m.scale.z=1.4;m.position.z=-.5;t.add(m);
+    if(i===0){t.position.set(0,2.0,-1.2);g.add(t)}else{t.position.set(0,0,-.7);par.add(t)}
+    tail.push(t);par=t;
+  }
+  // hai chân to
+  function leg(side){
+    const lg=new T.Group();
+    const thigh=new T.Mesh(new T.CylinderGeometry(.34,.28,1.1,10),skinM);thigh.position.y=-.55;lg.add(thigh);
+    const shin=new T.Group();shin.position.y=-1.05;
+    const sh=new T.Mesh(new T.CylinderGeometry(.24,.18,1.0,10),skinM);sh.position.y=-.5;shin.add(sh);
+    const foot=new T.Mesh(new T.BoxGeometry(.42,.22,.72),skinM);foot.position.set(0,-1.0,.22);shin.add(foot);
+    for(let c=0;c<3;c++){const cl=new T.Mesh(new T.ConeGeometry(.06,.22,6),clawM);cl.rotation.x=-Math.PI/2;cl.position.set(-.14+c*.14,-1.05,.56);shin.add(cl)}
+    lg.add(shin);lg.position.set(side*.5,1.7,-.1);lg.userData.shin=shin;lg.castShadow=!0;g.add(lg);return lg;
+  }
+  const legL=leg(-1),legR=leg(1);
+  // hai tay tí hon
+  function arm(side){const a=new T.Group();const up=new T.Mesh(new T.CylinderGeometry(.11,.09,.5,8),skinM);up.position.y=-.22;a.add(up);
+    const fo=new T.Mesh(new T.CylinderGeometry(.09,.07,.4,8),skinM);fo.position.set(0,-.55,.12);fo.rotation.x=.7;a.add(fo);
+    for(let c=0;c<2;c++){const cl=new T.Mesh(new T.ConeGeometry(.04,.14,6),clawM);cl.position.set(-.05+c*.1,-.78,.28);cl.rotation.x=1;a.add(cl)}
+    a.position.set(side*.55,2.55,.75);a.rotation.x=.4;g.add(a);return a;}
+  const armL=arm(-1),armR=arm(1);
+  g.scale.setScalar(scale);g.visible=!1;sc.add(g);
+  Object.assign(Boss,{grp:g,head,jaw,legL,legR,armL,armR,tail,eyeMats:[eyeMatL,eyeMatR],_body:body});
+  return g;
+}
+makeBossModel();
+// thanh máu boss to ở đỉnh màn hình + nhãn nổi trên đầu
+const bossBarWrap=document.createElement('div');
+bossBarWrap.id='boss-bar';
+bossBarWrap.style.cssText='position:absolute;left:50%;top:12px;transform:translateX(-50%);width:min(70vw,540px);z-index:38;display:none;pointer-events:none;text-align:center';
+bossBarWrap.innerHTML='<div style="font-weight:800;color:#ffdada;text-shadow:0 2px 6px #000;font-size:15px;letter-spacing:.5px">🦖 KHỦNG LONG BẠO CHÚA</div>'+
+  '<div style="margin-top:3px;height:16px;border:2px solid #7a1010;border-radius:9px;background:#2a0606;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.5)"><div id="boss-hp-fill" style="height:100%;width:100%;background:linear-gradient(90deg,#ff5b3a,#b30d0d);transition:width .15s"></div></div>'+
+  '<div id="boss-hp-txt" style="font-weight:700;color:#fff;text-shadow:0 1px 3px #000;font-size:11px;margin-top:1px"></div>';
+document.getElementById('ui').appendChild(bossBarWrap);
+function updateBossBar(){
+  if(!Boss.active){bossBarWrap.style.display='none';return}
+  bossBarWrap.style.display='block';
+  const p=Boss.hpMax?Math.max(0,Boss.hp/Boss.hpMax):0;
+  document.getElementById('boss-hp-fill').style.width=(p*100)+'%';
+  document.getElementById('boss-hp-txt').textContent=Math.ceil(Boss.hp)+' / '+Boss.hpMax+' HP';
+}
+// ---- danh sách mọi mục tiêu người chơi (mình + đối thủ đang chơi) cho AI boss ----
+function bossTargets(){
+  const arr=[];
+  if(!Me.dead&&!Me.waiting)arr.push({id:Me.id,pos:guy.position,local:!0});
+  for(const p of activePeers())if(!p.st.dead)arr.push({id:p.id,pos:p.av.grp.position,local:!1,peer:p});
+  return arr;
+}
+// ---- AUTHORITY: sinh boss ----
+function bossSpawn(){
+  const n=1+activePeers().length;
+  Boss.hpMax=Math.round(420+n*260);Boss.hp=Boss.hpMax;
+  const a=Math.random()*Math.PI*2;Boss.x=Math.cos(a)*18;Boss.z=Math.sin(a)*18;Boss.yaw=a+Math.PI;
+  Boss.active=!0;Boss.attackCd=1.5;Boss.anim=0;Boss.spawnFx=1;
+  Boss.grp.visible=!0;Boss.grp.position.set(Boss.x,0,Boss.z);Boss.grp.rotation.y=Boss.yaw;
+  Boss.tx=Boss.x;Boss.tz=Boss.z;Boss.tyaw=Boss.yaw;
+  audio.roar();document.body.style.animation='shake .6s ease-out';setTimeout(()=>document.body.style.animation='',600);
+  showFloat('🦖 KHỦNG LONG BẠO CHÚA XUẤT HIỆN!','#ff6a4a');
+  feed('🦖 <b>Khủng long bạo chúa</b> đã xuất hiện — cùng nhau hạ nó!');
+  if(netConnected())broadcast({t:'bossSpawn',hp:Boss.hp,hpMax:Boss.hpMax,x:Boss.x,z:Boss.z,yaw:Boss.yaw});
+  updateBossBar();
+}
+// ---- gây sát thương LÊN boss (mọi người gọi; authority áp dụng, người khác gửi bossHit) ----
+function hitBoss(amount,crit){
+  if(!Boss.active)return;
+  showFloatAt(Boss.grp.position.x,3.6,Boss.grp.position.z,'-'+Math.round(amount)+(crit?' 💥':''),crit?'#ffd23c':'#fff');
+  emitChipsAt(Boss.grp.position.x,2.4,Boss.grp.position.z,8,1.4);
+  if(Boss._body){Boss._body.material.emissive=new T.Color(0x661010);Boss._body.material.emissiveIntensity=.9;setTimeout(()=>{if(Boss._body)Boss._body.material.emissiveIntensity=0},90)}
+  if(bossAuthority()){
+    Boss.hp=Math.max(0,Boss.hp-amount);
+    if(Boss.hp<=0)bossDefeated();else broadcastBoss();
+    updateBossBar();
+  }else{
+    broadcast({t:'bossHit',dmg:amount});      // để host trừ máu
+  }
+}
+// người chơi vung đòn thường trúng boss? (giống tryHitOpponent nhưng cho boss)
+function tryHitBoss(dmgBase,chg){
+  if(!Boss.active)return !1;
+  const dx=Boss.grp.position.x-guy.position.x, dz=Boss.grp.position.z-guy.position.z;
+  const dist=Math.hypot(dx,dz);
+  if(dist>attackReach()+2.2)return !1;                 // boss to nên tầm đánh rộng hơn
+  const toAng=Math.atan2(dx,dz);
+  const diff=Math.abs(((toAng-GUY_YAW+Math.PI*3)%(Math.PI*2))-Math.PI);
+  if(diff>1.6)return !1;
+  const crit=Math.random()<critChance();
+  const dmg=Math.round(dmgBase*(1+chg*1.2)*(crit?2:1));
+  hitBoss(dmg,crit);
+  emitChipsAt(guy.position.x+Math.sin(GUY_YAW)*1.5,1.4,guy.position.z+Math.cos(GUY_YAW)*1.5,10,1.2);
+  if(lifeSteal()>0&&Me.hp<maxHP()){Me.hp=Math.min(maxHP(),Me.hp+Math.max(1,Math.round(dmg*lifeSteal())))}
+  lastCombat=performance.now();
+  return !0;
+}
+// ---- AUTHORITY: boss bị hạ ----
+function bossDefeated(){
+  if(!Boss.active)return;
+  if(netConnected())broadcast({t:'bossDie',x:Boss.grp.position.x,z:Boss.grp.position.z});
+  onBossDefeatedLocal(Boss.grp.position.x,Boss.grp.position.z);
+  Boss.timer=BOSS_RESPAWN;Boss.warned=!1;
+}
+// thưởng + hiệu ứng khi boss chết (chạy trên MỌI client)
+function onBossDefeatedLocal(x,z){
+  Boss.active=!1;Boss.grp.visible=!1;
+  audio.split();audio.roar();
+  document.body.style.animation='shake .7s ease-out';setTimeout(()=>document.body.style.animation='',700);
+  showFloat('🏆 HẠ GỤC KHỦNG LONG! +30🪵','#ffe27a');
+  feed('🏆 <b>Khủng long bạo chúa</b> đã bị hạ gục! Cả phòng +30🪵');
+  St.wood+=30;St.score+=200;Me.hp=maxHP();
+  for(let i=0;i<5;i++)spawnItemDrop(x+(Math.random()-.5)*3,z+(Math.random()-.5)*3,!0);
+  emitChipsAt(x,2,z,50,3);
+  saveProgress();updateUI();if(netConnected())broadcastStats();updateBossBar();
+}
+// ---- AUTHORITY: phát trạng thái boss cho cả phòng ----
+let bossNetTick=0;
+function broadcastBoss(){
+  if(!netConnected()||!bossAuthority())return;
+  broadcast({t:'boss',hp:Boss.hp,x:+Boss.grp.position.x.toFixed(2),z:+Boss.grp.position.z.toFixed(2),yaw:+Boss.yaw.toFixed(2),bite:Boss.biteSeq});
+}
+// đòn cắn của boss gây sát thương (authority quyết định)
+function bossBite(){
+  const dmg=18+Math.floor(Math.random()*8);
+  for(const tgt of bossTargets()){
+    const dx=tgt.pos.x-Boss.grp.position.x, dz=tgt.pos.z-Boss.grp.position.z;
+    const dist=Math.hypot(dx,dz);if(dist>BOSS_BITE_RANGE+1)continue;
+    const toAng=Math.atan2(dx,dz);
+    const diff=Math.abs(((toAng-Boss.yaw+Math.PI*3)%(Math.PI*2))-Math.PI);
+    if(diff>1.4)continue;                              // chỉ trúng thứ trước mặt
+    if(tgt.local){takeDamage(dmg,!1,'🦖 Khủng Long')}
+    else{netSendTo(tgt.id,{t:'hit',dmg,crit:!1,from:'boss',fromName:'🦖 Khủng Long'})}
+  }
+}
+function triggerBite(){Boss.anim=1;Boss.animT=0;Boss.bitDone=!1;Boss.biteSeq++;}
+// ---- cập nhật boss mỗi khung hình (AI cho authority + nội suy/animation cho mọi người) ----
+function updateBoss(dt,time){
+  // AUTHORITY: đếm giờ xuất hiện
+  if(bossAuthority()&&!Boss.active){
+    Boss.timer-=dt;
+    if(!Boss.warned&&Boss.timer<=10){Boss.warned=!0;showFloat('⚠️ Khủng long sắp xuất hiện...','#ff9a44');feed('⚠️ Chuẩn bị! Khủng long sắp tới trong 10 giây.')}
+    if(Boss.timer<=0)bossSpawn();
+  }
+  if(!Boss.active){updateBossBar();return}
+  const g=Boss.grp;
+  if(bossAuthority()){
+    // chọn mục tiêu gần nhất
+    let tgt=null,bd=1e9;
+    for(const t of bossTargets()){const d=Math.hypot(t.pos.x-g.position.x,t.pos.z-g.position.z);if(d<bd){bd=d;tgt=t}}
+    if(tgt){
+      const dx=tgt.pos.x-g.position.x, dz=tgt.pos.z-g.position.z;const dist=Math.hypot(dx,dz)||1;
+      Boss.yaw=Math.atan2(dx,dz);
+      if(dist>BOSS_BITE_RANGE){                       // đuổi theo
+        const sp=BOSS_SPEED*dt;g.position.x+=dx/dist*sp;g.position.z+=dz/dist*sp;
+        Boss.walk+=dt*6;
+      }
+      Boss.attackCd-=dt;
+      if(dist<=BOSS_BITE_RANGE+.5&&Boss.attackCd<=0&&Boss.anim===0){triggerBite();Boss.attackCd=2.2}
+    }
+    // giữ trong sân
+    const rr=Math.hypot(g.position.x,g.position.z);if(rr>21){g.position.x*=21/rr;g.position.z*=21/rr}
+    g.rotation.y+=(((Boss.yaw-g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI)*Math.min(1,dt*6);
+    bossNetTick+=dt;if(bossNetTick>0.1){bossNetTick=0;broadcastBoss()}
+  }else{
+    // NON-AUTHORITY: nội suy vị trí/hướng do host gửi
+    g.position.x+=(Boss.tx-g.position.x)*Math.min(1,dt*10);
+    g.position.z+=(Boss.tz-g.position.z)*Math.min(1,dt*10);
+    g.rotation.y+=(((Boss.tyaw-g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI)*Math.min(1,dt*10);
+    if(Math.hypot(g.position.x-Boss.tx,g.position.z-Boss.tz)>0.05)Boss.walk+=dt*6;
+    if(Boss.biteSeq!==Boss.lastBiteSeq){Boss.lastBiteSeq=Boss.biteSeq;triggerBite()}
+  }
+  // ---- animation: đi + ngoáy đuôi + cắn ----
+  const wb=Math.sin(Boss.walk);
+  g.position.y=Math.abs(wb)*0.12;                     // nhấp nhô khi bước
+  if(Boss.legL){Boss.legL.rotation.x=wb*0.5;Boss.legR.rotation.x=-wb*0.5;}
+  Boss.tail.forEach((t,i)=>{t.rotation.y=Math.sin(time*2+i*0.5)*0.18;});
+  if(Boss.armL){Boss.armL.rotation.x=.4+Math.sin(time*3)*.1;Boss.armR.rotation.x=.4+Math.cos(time*3)*.1;}
+  // nhấp nháy mắt
+  const eg=1.0+Math.sin(time*8)*0.3;Boss.eyeMats.forEach(m=>m.emissiveIntensity=eg);
+  if(Boss.anim===1){
+    Boss.animT+=dt;const p=Boss.animT/0.6;
+    const lunge=Math.sin(Math.min(1,p)*Math.PI);       // lao đầu tới rồi rút
+    Boss.head.rotation.x=lunge*0.6;Boss.head.position.z=1.75+lunge*0.5;
+    Boss.jaw.rotation.x=lunge*0.7;                      // há mồm
+    if(!Boss.bitDone&&p>=0.45){Boss.bitDone=!0;if(bossAuthority())bossBite();audio.chop();
+      emitChipsAt(g.position.x+Math.sin(Boss.yaw)*2.5,1.2,g.position.z+Math.cos(Boss.yaw)*2.5,14,1.6);}
+    if(p>=1){Boss.anim=0;Boss.head.rotation.x=0;Boss.head.position.z=1.75;Boss.jaw.rotation.x=0}
+  }
+  // ánh sáng xuất hiện
+  if(Boss.spawnFx>0){Boss.spawnFx=Math.max(0,Boss.spawnFx-dt*1.5);g.scale.setScalar(1.0*(1+ (1-Boss.spawnFx)*0)+ (0));}
+  updateBossBar();
+}
+// hiện số nổi tại một điểm 3D (dùng cho sát thương lên boss)
+const _sfv=new T.Vector3();
+function showFloatAt(wx,wy,wz,text,color){
+  _sfv.set(wx,wy,wz);_sfv.project(cam);if(_sfv.z>1)return;
+  const el=document.createElement('div');el.textContent=text;
+  el.style.cssText='position:absolute;pointer-events:none;font-weight:800;font-size:18px;z-index:39;text-shadow:0 2px 5px rgba(0,0,0,.7);color:'+(color||'#fff')+';left:'+((_sfv.x*.5+.5)*innerWidth)+'px;top:'+((-_sfv.y*.5+.5)*innerHeight)+'px;transform:translate(-50%,-50%)';
+  el.style.animation='floatUp 1s ease-out';document.getElementById('ui').appendChild(el);setTimeout(()=>el.remove(),1000);
 }
 
 // ============== KỸ NĂNG VŨ KHÍ ==============
@@ -2216,7 +2485,7 @@ function useSkill(){
   if(Me.dead||Me.waiting)return;
   const s=curWeapon.skill;
   if(!skillReady()){return}
-  if(!netConnected()){showFloat('⚔️ Kỹ năng chỉ dùng khi chơi mạng','#ffd36b');return}
+  if(!netConnected()&&!Boss.active){showFloat('⚔️ Kỹ năng chỉ dùng khi chơi mạng hoặc đánh boss','#ffd36b');return}
   skillCd[s.id]=s.cd;
   audio.split();
   showFloat(s.icon+' '+s.name+'!','#ffe27a');
@@ -2333,7 +2602,7 @@ function updateSkills(dt){
 }
 function updateSkillHUD(){
   const btn=document.getElementById('skill-btn');if(!btn)return;
-  btn.classList.toggle('on',netConnected());     // chỉ hiện nút skill khi chơi mạng
+  btn.classList.toggle('on',netConnected()||Boss.active);     // hiện nút skill khi chơi mạng hoặc có boss
   const s=curWeapon.skill;const cd=skillCd[s.id]||0;
   btn.querySelector('.ic').textContent=s.icon;
   const cdEl=btn.querySelector('.cd');
@@ -2519,6 +2788,29 @@ function applyMsg(d,fromId){
       const nm=(peers[d.id||fromId]&&peers[d.id||fromId].st.name)||d.name||'Người chơi';
       recvChat(nm,d.msg);
       break;
+    }
+    case 'bossSpawn':{                       // host báo boss xuất hiện
+      if(bossAuthority())break;
+      Boss.hpMax=d.hpMax;Boss.hp=d.hp;Boss.active=!0;Boss.grp.visible=!0;
+      Boss.tx=d.x;Boss.tz=d.z;Boss.tyaw=d.yaw;Boss.grp.position.set(d.x,0,d.z);Boss.grp.rotation.y=d.yaw;Boss.yaw=d.yaw;
+      audio.roar();showFloat('🦖 KHỦNG LONG BẠO CHÚA XUẤT HIỆN!','#ff6a4a');
+      feed('🦖 <b>Khủng long bạo chúa</b> đã xuất hiện — cùng nhau hạ nó!');
+      updateBossBar();break;
+    }
+    case 'boss':{                            // host đồng bộ trạng thái boss
+      if(bossAuthority())break;
+      Boss.hp=d.hp;Boss.tx=d.x;Boss.tz=d.z;Boss.tyaw=d.yaw;if(typeof d.bite==='number')Boss.biteSeq=d.bite;
+      if(!Boss.active){Boss.active=!0;Boss.grp.visible=!0}updateBossBar();break;
+    }
+    case 'bossHit':{                         // guest đánh trúng → host trừ máu
+      if(!bossAuthority()||!Boss.active)break;
+      Boss.hp=Math.max(0,Boss.hp-(d.dmg||0));
+      if(Boss.hp<=0)bossDefeated();else broadcastBoss();
+      updateBossBar();break;
+    }
+    case 'bossDie':{                         // host báo boss chết
+      if(bossAuthority())break;
+      onBossDefeatedLocal(d.x||Boss.grp.position.x,d.z||Boss.grp.position.z);break;
     }
   }
 }
@@ -2928,7 +3220,12 @@ function updatePlayer(dt,time){
       if(d<enemyD){enemyD=d;enemyName=p.st.name;enemyHp=p.st.hp;enemyPos=p.av.grp.position}
     }
   }
-  const enemyInRange=enemyD<=attackReach()&&enemyPos;
+  // 🦖 boss cũng là mục tiêu ưu tiên khi ở gần
+  if(Boss.active&&!Me.dead){
+    const d=Math.hypot(guy.position.x-Boss.grp.position.x,guy.position.z-Boss.grp.position.z)-1.2; // trừ bán kính thân boss
+    if(d<enemyD){enemyD=d;enemyName='🦖 Khủng Long';enemyHp=Boss.hp;enemyPos=Boss.grp.position}
+  }
+  const enemyInRange=enemyD<=attackReach()+2.2&&enemyPos;
   // when idle & not chopping, face the enemy if close, else the wood target
   if(!moving&&!St.isChopping){
     let ang;
@@ -2967,6 +3264,7 @@ function loop(){
   updateBuffs(dt);
   updateBubbles(dt);
   updateSkills(dt);
+  updateBoss(dt,time);                      // 🦖 boss khủng long
   if(curWeapon.twoHand)syncLeftArm();       // Song Đao: tay trái cầm đao thứ hai theo tay phải
 
   // ===== DRAGON-FIRE axe trail (wide additive ribbon) =====
