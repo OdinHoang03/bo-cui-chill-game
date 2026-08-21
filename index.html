@@ -229,6 +229,13 @@ canvas{display:block}
   <div id="weapon-list"></div>
   <div class="note">💡 Mở khoá vũ khí bằng gỗ. Kỹ năng chỉ gây sát thương khi đang chơi mạng (có đối thủ).</div>
 </div>
+<div id="cos-panel" class="panel">
+  <button class="close" onclick="document.getElementById('cos-panel').classList.remove('on')">✕</button>
+  <h2>✨ Ngoại hình đặc biệt</h2>
+  <div class="sub">Trang phục &amp; hào quang hiếm — chỉ nhận được khi <b>hạ khủng long bạo chúa</b> 🦖. Bấm để mặc/cởi.</div>
+  <div id="cos-list"></div>
+  <div class="note">💡 Mỗi lần hạ boss có cơ hội rơi một món ngoại hình chưa sở hữu. Ngoại hình chỉ để khoe — không ảnh hưởng chỉ số.</div>
+</div>
 <div id="name-panel" class="panel">
   <button class="close" onclick="document.getElementById('name-panel').classList.remove('on')">✕</button>
   <h2>✏️ Đặt tên nhân vật</h2>
@@ -272,7 +279,7 @@ canvas{display:block}
   <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → nhận <b>link mời</b> hoặc mã.<br>2. Gửi link/mã cho người kia (Zalo/Messenger…).<br>3. Người kia <b>bấm link</b> để vào thẳng, hoặc <b>Nhập mã</b> rồi bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ — lại gần và vung rìu để đánh nhau!<br><span style="opacity:.8">⚠️ Khác WiFi/4G có thể mất ~10s để kết nối. Nếu mãi không vào được, một số WiFi trường/công ty chặn P2P — hãy thử chuyển sang <b>4G/5G</b>.</span></div>
   <div class="note" id="mp-net-note" style="margin-top:8px">⚠️ Đang dùng kết nối P2P (PeerJS). Nếu khác mạng khó vào, có thể cắm server Cloudflare (xem README) để ổn định hơn.</div>
 </div>
-<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="weapon-btn">🗡️ Vũ khí</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
+<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="weapon-btn">🗡️ Vũ khí</button><button id="cos-btn">✨ Ngoại hình</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -1187,6 +1194,75 @@ auraRing.rotation.x=Math.PI/2;auraRing.position.y=0.05;guy.add(auraRing);
 const auraLight=new T.PointLight(0xffcf40,0,6);auraLight.position.set(0,1.0,0);guy.add(auraLight);
 let auraLevel=0;   // smoothed 0..1 aura intensity
 
+// ============== 🏆 TRANG PHỤC / HÀO QUANG ĐẶC BIỆT (thưởng hạ boss) ==============
+// Mỗi lần hạ khủng long có cơ hội rơi 1 cosmetic hiếm. Mở khoá vĩnh viễn (lưu
+// localStorage). Người chơi có thể bật/tắt trong bảng "✨ Ngoại hình".
+const COSMETICS=[
+  {id:'halo',   name:'Hào Quang Thiên Thần', icon:'😇', kind:'halo',  color:0xfff1a8},
+  {id:'flame',  name:'Hào Quang Lửa Rồng',   icon:'🔥', kind:'aura',  color:0xff5a1e},
+  {id:'frost',  name:'Hào Quang Băng Giá',   icon:'❄️', kind:'aura',  color:0x7fe0ff},
+  {id:'void',   name:'Hào Quang Hắc Ám',     icon:'🌌', kind:'aura',  color:0xb46cff},
+  {id:'crown',  name:'Vương Miện Bạo Chúa',  icon:'👑', kind:'crown', color:0xffd23c},
+  {id:'wings',  name:'Đôi Cánh Ánh Sáng',    icon:'🕊️', kind:'wings', color:0xcfe8ff},
+];
+let ownedCos={};                 // {id:true} đã mở khoá
+let equippedCos=null;            // id đang mặc (hoặc null)
+// ---- dựng các mesh cosmetic gắn vào guy (ẩn cho tới khi mặc) ----
+// vòng hào quang trên đầu
+const cosHalo=new T.Mesh(new T.TorusGeometry(.24,.035,10,28),new T.MeshBasicMaterial({color:0xfff1a8,transparent:!0,opacity:.95,blending:T.AdditiveBlending,depthWrite:!1}));
+cosHalo.rotation.x=Math.PI/2;cosHalo.position.y=1.5;cosHalo.visible=!1;guy.add(cosHalo);
+// hào quang màu (dùng lại sprite lửa nhưng đổi màu, luôn hiện khi mặc aura)
+const cosAura=new T.Sprite(new T.SpriteMaterial({map:auraTex,color:0xff5a1e,transparent:!0,opacity:0,blending:T.AdditiveBlending,depthWrite:!1}));
+cosAura.scale.set(2.7,3.6,1);cosAura.position.y=0.9;cosAura.visible=!1;guy.add(cosAura);
+const cosAuraLight=new T.PointLight(0xff5a1e,0,6);cosAuraLight.position.set(0,1,0);guy.add(cosAuraLight);
+// vương miện vàng
+const cosCrown=new T.Group();cosCrown.position.y=1.34;cosCrown.visible=!1;guy.add(cosCrown);
+(function(){const band=new T.Mesh(new T.CylinderGeometry(.17,.19,.09,12,1,!0),new T.MeshStandardMaterial({color:0xffd23c,metalness:.9,roughness:.25,emissive:0x5a4200,emissiveIntensity:.5,side:T.DoubleSide}));cosCrown.add(band);
+  for(let i=0;i<6;i++){const a=i/6*Math.PI*2;const sp=new T.Mesh(new T.ConeGeometry(.03,.12,6),new T.MeshStandardMaterial({color:0xffdf5c,metalness:.9,roughness:.2,emissive:0x5a4200,emissiveIntensity:.5}));sp.position.set(Math.cos(a)*.18,.09,Math.sin(a)*.18);cosCrown.add(sp);
+    const gem=new T.Mesh(new T.OctahedronGeometry(.022,0),new T.MeshStandardMaterial({color:0xff4b6e,emissive:0xff4b6e,emissiveIntensity:.7}));gem.position.set(Math.cos(a)*.18,.15,Math.sin(a)*.18);cosCrown.add(gem)}})();
+// đôi cánh ánh sáng
+const cosWings=new T.Group();cosWings.position.set(0,.75,-.18);cosWings.visible=!1;guy.add(cosWings);
+[-1,1].forEach(s=>{const wing=new T.Mesh(new T.PlaneGeometry(.6,.9,1,1),new T.MeshBasicMaterial({color:0xcfe8ff,transparent:!0,opacity:.5,side:T.DoubleSide,blending:T.AdditiveBlending,depthWrite:!1}));
+  wing.position.set(s*.34,.1,0);wing.rotation.y=s*0.9;wing.userData.side=s;cosWings.add(wing)});
+let cosTime=0;
+function currentCos(){return equippedCos?COSMETICS.find(c=>c.id===equippedCos):null}
+function refreshCosmeticMeshes(){
+  const c=currentCos();
+  cosHalo.visible=!!(c&&c.kind==='halo');
+  cosCrown.visible=!!(c&&c.kind==='crown');
+  cosWings.visible=!!(c&&c.kind==='wings');
+  const auraOn=!!(c&&c.kind==='aura');
+  cosAura.visible=auraOn;
+  if(auraOn){cosAura.material.color.setHex(c.color);cosAuraLight.color.setHex(c.color)}
+  cosAuraLight.intensity=auraOn?1.6:0;
+  if(c&&c.kind==='halo')cosHalo.material.color.setHex(c.color);
+}
+function equipCosmetic(id){
+  equippedCos=(id&&ownedCos[id])?id:null;
+  refreshCosmeticMeshes();saveProgress();
+  if(typeof renderCosmetics==='function')renderCosmetics();
+}
+// mở khoá 1 cosmetic ngẫu nhiên chưa có; nếu đã đủ bộ thì thưởng gỗ thêm
+function unlockRandomCosmetic(){
+  const locked=COSMETICS.filter(c=>!ownedCos[c.id]);
+  if(!locked.length){St.wood+=25;showFloat('🏆 Đủ bộ ngoại hình! +25🪵 thay thế','#ffe27a');updateUI();return null}
+  const c=locked[Math.floor(Math.random()*locked.length)];
+  ownedCos[c.id]=!0;
+  showFloat(c.icon+' MỞ KHOÁ: '+c.name+'!','#ffe27a');
+  feed('🎁 Nhận <b>'+c.icon+' '+c.name+'</b> từ khủng long! Mở bảng ✨ Ngoại hình để mặc.');
+  if(!equippedCos)equipCosmetic(c.id);          // tự mặc nếu chưa mặc gì
+  saveProgress();
+  return c;
+}
+// hoạt ảnh cosmetic mỗi khung hình (xoay hào quang, vỗ cánh, nhấp nháy)
+function updateCosmetics(dt){
+  cosTime+=dt;
+  if(cosHalo.visible){cosHalo.rotation.z+=dt*1.5;cosHalo.position.y=1.5+Math.sin(cosTime*2)*0.02;cosHalo.material.opacity=0.8+Math.sin(cosTime*4)*0.15}
+  if(cosCrown.visible)cosCrown.rotation.y+=dt*0.6;
+  if(cosAura.visible){const f=0.6+Math.sin(cosTime*10)*0.15;cosAura.material.opacity=0.5*f;cosAura.scale.set(2.6+Math.sin(cosTime*3)*.12,3.5+Math.sin(cosTime*2.4)*.16,1);cosAuraLight.intensity=1.4*f}
+  if(cosWings.visible){cosWings.children.forEach(w=>{w.rotation.y=w.userData.side*(0.7+Math.sin(cosTime*5)*0.35)})}
+}
+
 // ============== REMOTE PLAYER AVATAR (multiplayer) ==============
 // A lighter-weight copy of the woodsman (no aura/axe model) used to draw the
 // opponent. Built on demand when a peer connects.
@@ -1881,6 +1957,32 @@ function toggleWeapon(){
 document.getElementById('weapon-btn').addEventListener('click',toggleWeapon);
 document.getElementById('skill-btn').addEventListener('click',useSkill);
 
+// ---------- kho ngoại hình (trang phục / hào quang từ boss) ----------
+const cosPanel=document.getElementById('cos-panel');
+function renderCosmetics(){
+  const list=document.getElementById('cos-list');if(!list)return;list.innerHTML='';
+  const ownedN=COSMETICS.filter(c=>ownedCos[c.id]).length;
+  for(const c of COSMETICS){
+    const owned=!!ownedCos[c.id], on=equippedCos===c.id;
+    const row=document.createElement('div');row.className='wp-row'+(on?' on':'');
+    row.innerHTML='<div class="wic">'+(owned?c.icon:'🔒')+'</div>'+
+      '<div class="info"><div class="t">'+c.name+'</div>'+
+      '<div class="d">'+(owned?'Đã sở hữu — chỉ để khoe, không đổi chỉ số.':'Chưa mở khoá — hạ khủng long để có cơ hội nhận.')+'</div></div>';
+    const btn=document.createElement('button');
+    if(!owned){btn.textContent='🦖 Rơi từ boss';btn.disabled=!0}
+    else if(on){btn.textContent='✓ Đang mặc — cởi';btn.onclick=()=>{equipCosmetic(null)}}
+    else{btn.textContent='Mặc';btn.onclick=()=>{equipCosmetic(c.id)}}
+    row.appendChild(btn);list.appendChild(row);
+  }
+  if(!ownedN){const n=document.createElement('div');n.className='note';n.style.marginTop='8px';n.textContent='Bạn chưa có món ngoại hình nào. Sống sót tới khi khủng long xuất hiện rồi hạ nó để nhận thưởng hiếm!';list.appendChild(n)}
+}
+function toggleCosmetics(){
+  const wasOn=cosPanel.classList.contains('on');
+  closeAllPanels();
+  if(!wasOn){cosPanel.classList.add('on');renderCosmetics()}
+}
+document.getElementById('cos-btn').addEventListener('click',toggleCosmetics);
+
 // ---------- player name ----------
 const namePanel=document.getElementById('name-panel');
 function applyName(n){
@@ -1909,7 +2011,7 @@ document.getElementById('name-save').addEventListener('click',saveName);
 
 // ---------- save / load progression ----------
 function saveProgress(){
-  try{localStorage.setItem('boCuiSave',JSON.stringify({Up,wood:St.wood,score:St.score,chops:St.chops,maxCombo:St.maxCombo,kills:Me.kills,deaths:Me.deaths,name:Me.name,weapons:ownedWeapons,weapon:curWeapon.id}))}catch(e){}
+  try{localStorage.setItem('boCuiSave',JSON.stringify({Up,wood:St.wood,score:St.score,chops:St.chops,maxCombo:St.maxCombo,kills:Me.kills,deaths:Me.deaths,name:Me.name,weapons:ownedWeapons,weapon:curWeapon.id,cos:ownedCos,cosEq:equippedCos}))}catch(e){}
 }
 function loadProgress(){
   try{
@@ -1921,6 +2023,9 @@ function loadProgress(){
     if(s.name)Me.name=String(s.name).slice(0,14);
     if(s.weapons&&typeof s.weapons==='object'){ownedWeapons={axe:!0,...s.weapons}}
     if(s.weapon&&WEAPONS.find(w=>w.id===s.weapon))equipWeapon(s.weapon);
+    if(s.cos&&typeof s.cos==='object')ownedCos={...s.cos};
+    if(s.cosEq&&COSMETICS.find(c=>c.id===s.cosEq)&&ownedCos[s.cosEq])equippedCos=s.cosEq;
+    refreshCosmeticMeshes();
     document.getElementById('me-name').textContent=Me.name;
     Me.hpMax=maxHP();Me.hp=Me.hpMax;
   }catch(e){}
@@ -2249,10 +2354,10 @@ function dealAreaDamageBoss(dmg,pred,tag){
 // kênh 'hit' sẵn có. Hạ boss → cả phòng nhận thưởng lớn.
 const BOSS_FIRST=60;         // lần đầu xuất hiện sau 1 phút
 const BOSS_RESPAWN=60;       // tái xuất sau khi bị hạ (1 phút)
-const BOSS_BITE_RANGE=3.6;   // tầm cắn
-const BOSS_SPEED=2.6;        // tốc độ đuổi
+const BOSS_BITE_RANGE=3.9;   // tầm cắn
+const BOSS_SPEED=3.1;        // tốc độ đuổi
 const Boss={active:!1,grp:null,head:null,jaw:null,legL:null,legR:null,armL:null,armR:null,tail:[],eyeMats:[],
-  hp:0,hpMax:0,x:0,z:0,yaw:0,tx:0,tz:0,tyaw:0,timer:BOSS_FIRST,spawnAt:0,warned:!1,
+  hp:0,hpMax:0,dmgMul:1,x:0,z:0,yaw:0,tx:0,tz:0,tyaw:0,timer:BOSS_FIRST,spawnAt:0,warned:!1,
   attackCd:0,anim:0,animT:0,biteSeq:0,lastBiteSeq:0,bitDone:!1,walk:0,spawnFx:0};
 function bossAuthority(){return !netConnected()||netRole==='host'}
 // hẹn giờ boss xuất hiện theo ĐỒNG HỒ TƯỜNG (Date.now) — bền qua F5 nhờ lưu mốc
@@ -2361,10 +2466,24 @@ function bossTargets(){
   for(const p of activePeers())if(!p.st.dead)arr.push({id:p.id,pos:p.av.grp.position,local:!1,peer:p});
   return arr;
 }
+// ---- SỨC MẠNH cả phòng: tổng cấp + máu tối đa của mọi người chơi đang chơi ----
+// Boss được cân theo đây để luôn "xứng tầm": người mạnh / phòng đông → boss trâu
+// và cắn đau hơn (server = host tính rồi nhân theo số người & cấp độ).
+function roomStrength(){
+  let lvlSum=playerLevel(), hpSum=maxHP(), cnt=1;
+  for(const p of activePeers()){ if(p.st.dead)continue; lvlSum+=(p.st.lvl||1); hpSum+=(p.st.hpMax||100); cnt++; }
+  return {lvlSum, hpSum, cnt, avgHp:hpSum/cnt};
+}
 // ---- AUTHORITY: sinh boss ----
 function bossSpawn(){
-  const n=1+activePeers().length;
-  Boss.hpMax=Math.round(420+n*260);Boss.hp=Boss.hpMax;
+  // CÂN BOSS THEO SỨC MẠNH THỰC TẾ CỦA CẢ PHÒNG (server=host tính)
+  const s=roomStrength();
+  // máu = nền + theo tổng cấp + theo tổng máu người chơi (đông & mạnh → trâu hơn)
+  Boss.hpMax=Math.round(900 + s.lvlSum*260 + s.hpSum*3.2);
+  Boss.hp=Boss.hpMax;
+  // sát thương cắn nhân theo máu trung bình người chơi để luôn "đáng sợ"
+  // (người 100 HP → x1; người 300 HP → ~x2.1). Giới hạn 0.8–3.0.
+  Boss.dmgMul=Math.max(0.8,Math.min(3.0, s.avgHp/140 + s.lvlSum*0.03));
   // sinh gần người chơi & trong tầm nhìn (không lọt vào sương mù ở rìa sân)
   const a=GUY_YAW+(Math.random()-0.5)*1.2;              // phía trước-lệch của người chơi
   const r=11;
@@ -2427,6 +2546,7 @@ function onBossDefeatedLocal(x,z){
   showFloat('🏆 HẠ GỤC KHỦNG LONG! +30🪵','#ffe27a');
   feed('🏆 <b>Khủng long bạo chúa</b> đã bị hạ gục! Cả phòng +30🪵');
   St.wood+=30;St.score+=200;Me.hp=maxHP();
+  unlockRandomCosmetic();                    // 🎁 rơi trang phục / hào quang đặc biệt
   for(let i=0;i<5;i++)spawnItemDrop(x+(Math.random()-.5)*3,z+(Math.random()-.5)*3,!0);
   emitChipsAt(x,2,z,50,3);
   saveProgress();updateUI();if(netConnected())broadcastStats();updateBossBar();
@@ -2449,7 +2569,7 @@ function sendBossSnapshotTo(pid){
 }
 // đòn cắn của boss gây sát thương (authority quyết định)
 function bossBite(){
-  const dmg=18+Math.floor(Math.random()*8);
+  const dmg=Math.round((34+Math.floor(Math.random()*14))*(Boss.dmgMul||1));   // cắn theo sức mạnh phòng
   for(const tgt of bossTargets()){
     const dx=tgt.pos.x-Boss.grp.position.x, dz=tgt.pos.z-Boss.grp.position.z;
     const dist=Math.hypot(dx,dz);if(dist>BOSS_BITE_RANGE+1)continue;
@@ -3348,6 +3468,7 @@ function loop(){
   updateBuffs(dt);
   updateBubbles(dt);
   updateSkills(dt);
+  updateCosmetics(dt);                      // ✨ hào quang / trang phục đặc biệt
   updateBoss(dt,time);                      // 🦖 boss khủng long
   if(curWeapon.twoHand)syncLeftArm();       // Song Đao: tay trái cầm đao thứ hai theo tay phải
 

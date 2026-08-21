@@ -44,19 +44,29 @@ export class Room {
 
   // ---- helpers over the live sockets ----
   sockets() { return this.state.getWebSockets(); }
+  // chỉ những socket THỰC SỰ còn mở (readyState OPEN=1). Socket "ma" của tab đã
+  // đóng/F5/mất mạng còn kẹt trong getWebSockets() cho tới khi close kịp bắn —
+  // nếu đếm cả chúng thì phòng 1v1 báo "full" oan khi người cũ vào lại.
+  liveSockets() { const out = []; for (const ws of this.sockets()) { try { if (ws.readyState === undefined || ws.readyState === 1) out.push(ws); } catch (e) {} } return out; }
+  // dọn socket đã đóng: gọi onGone cho từng cái để phát 'bye' + cập nhật roster
+  pruneDead() {
+    for (const ws of this.sockets()) {
+      try { if (ws.readyState !== undefined && ws.readyState !== 1) { this.onGone(ws); } } catch (e) {}
+    }
+  }
   meta(ws) { try { return ws.deserializeAttachment() || {}; } catch (e) { return {}; } }
   setMeta(ws, m) { try { ws.serializeAttachment(m); } catch (e) {} }
-  activeCount() { let n = 0; for (const ws of this.sockets()) if (!this.meta(ws).waiting) n++; return n; }
-  roomIsMulti() { const s = this.sockets(); return s.length ? !!this.meta(s[0]).room : null; }
+  activeCount() { let n = 0; for (const ws of this.liveSockets()) if (!this.meta(ws).waiting) n++; return n; }
+  roomIsMulti() { const s = this.liveSockets(); return s.length ? !!this.meta(s[0]).room : null; }
   roster() {
-    return this.sockets().map(ws => {
+    return this.liveSockets().map(ws => {
       const c = this.meta(ws);
       return { id: c.id, name: c.name, lvl: c.lvl || 1, kills: c.kills || 0, deaths: c.deaths || 0, dead: !!c.dead, waiting: !!c.waiting };
     });
   }
   send(ws, obj) { try { ws.send(JSON.stringify(obj)); } catch (e) {} }
-  sendToId(id, obj) { for (const ws of this.sockets()) if (this.meta(ws).id === id) { this.send(ws, obj); return; } }
-  broadcast(obj, exceptId) { const s = JSON.stringify(obj); for (const ws of this.sockets()) { if (exceptId && this.meta(ws).id === exceptId) continue; try { ws.send(s); } catch (e) {} } }
+  sendToId(id, obj) { for (const ws of this.liveSockets()) if (this.meta(ws).id === id) { this.send(ws, obj); return; } }
+  broadcast(obj, exceptId) { const s = JSON.stringify(obj); for (const ws of this.liveSockets()) { if (exceptId && this.meta(ws).id === exceptId) continue; try { ws.send(s); } catch (e) {} } }
   sendRoster() { this.broadcast({ t: 'roster', players: this.roster(), max: MAX }); }
 
   async fetch(request) {
@@ -64,7 +74,8 @@ export class Room {
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('expected websocket', { status: 426, headers: CORS });
     }
-    const existing = this.sockets();
+    this.pruneDead();                    // dọn socket ma TRƯỚC khi đếm chỗ
+    const existing = this.liveSockets();
     const reqMode = url.searchParams.get('m') || '1';
     // loại phòng do người đầu tiên quyết định; người sau kế thừa
     const room = existing.length ? !!this.meta(existing[0]).room : (reqMode === 'r');
@@ -139,14 +150,17 @@ export class Room {
   webSocketError(ws, err) { this.onGone(ws); }
 
   onGone(ws) {
-    const room = this.meta(ws).room;
+    const c = this.meta(ws);
+    if (c._gone) return;                 // tránh xử lý 2 lần (pruneDead + sự kiện close)
+    c._gone = true; this.setMeta(ws, c);
+    const room = c.room;
     try { ws.close(); } catch (e) {}
     // ws đã bị gỡ khỏi getWebSockets() sau close; nếu còn chỗ, kéo người chờ vào
     if (room && this.activeCount() < MAX) {
-      const w = this.sockets().find(s => this.meta(s).waiting);
+      const w = this.liveSockets().find(s => this.meta(s).waiting);
       if (w) { const m = this.meta(w); m.waiting = false; this.setMeta(w, m); this.send(w, { t: 'setWaiting', waiting: false }); }
     }
-    const id = this.meta(ws).id;
+    const id = c.id;
     if (id) this.broadcast({ t: 'bye', id });
     this.sendRoster();
   }
@@ -156,7 +170,7 @@ export class Room {
   handleDeath(ws) {
     const c = this.meta(ws);
     if (!c.room || c.waiting) return;
-    const waiterWs = this.sockets().find(s => this.meta(s).waiting);
+    const waiterWs = this.liveSockets().find(s => this.meta(s).waiting);
     if (!waiterWs) return;             // không ai chờ → hồi sinh bình thường
     c.waiting = true; this.setMeta(ws, c);
     this.send(ws, { t: 'setWaiting', waiting: true, reason: 'Bạn đã hết lượt — chờ tới lượt vào lại' });
