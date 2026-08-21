@@ -86,6 +86,25 @@ canvas{display:block}
 #net-status.on{display:block}
 #kill-feed{position:absolute;top:150px;right:20px;width:230px;display:flex;flex-direction:column;gap:5px;pointer-events:none}
 #kill-feed div{background:rgba(0,0,0,.55);border-left:3px solid #ff7a4d;border-radius:8px;padding:5px 10px;color:#fff;font-size:12px;animation:fadeOut 4.5s forwards}
+/* ===== CHAT ===== */
+#chat-box{position:absolute;left:20px;bottom:20px;width:290px;display:none;flex-direction:column;gap:6px;z-index:22}
+#chat-box.on{display:flex}
+#chat-log{display:flex;flex-direction:column;gap:4px;max-height:190px;overflow-y:auto;padding-right:2px}
+#chat-log div{background:rgba(0,0,0,.5);backdrop-filter:blur(6px);border-radius:9px;padding:5px 9px;color:#fff;font-size:12px;line-height:1.35;word-break:break-word;animation:chatIn .25s ease-out}
+#chat-log div.sys{border-left:3px solid #7fe0a0;opacity:.9}
+#chat-log b{color:#ffd36b}
+@keyframes chatIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#chat-input-row{display:none;gap:6px}
+#chat-box.typing #chat-input-row{display:flex}
+#chat-input{flex:1;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:8px 11px;color:#fff;font-size:13px;outline:none}
+#chat-input:focus{border-color:#7fe0a0}
+#chat-send{background:#4d9e6a;border:none;border-radius:10px;padding:0 14px;color:#fff;font-size:16px;cursor:pointer}
+#chat-send:hover{background:#5cb87c}
+#chat-toggle{position:absolute;left:20px;bottom:20px;width:44px;height:44px;border-radius:12px;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);color:#fff;font-size:20px;display:none;align-items:center;justify-content:center;cursor:pointer;z-index:21}
+#chat-toggle.on{display:flex}
+#chat-toggle:hover{background:rgba(255,255,255,.15)}
+/* bong bóng thoại trên đầu nhân vật */
+.chat-bubble{position:absolute;transform:translate(-50%,-100%);background:rgba(255,255,255,.95);color:#222;padding:5px 10px;border-radius:12px;font-size:12px;font-weight:600;max-width:180px;text-align:center;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.3);z-index:15;white-space:normal}
 #dead-overlay{position:absolute;inset:0;background:rgba(90,0,0,.35);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;flex-direction:column;color:#fff;z-index:25}
 #dead-overlay.on{display:flex}
 #dead-overlay .big{font-size:46px;font-weight:900;text-shadow:0 4px 20px rgba(0,0,0,.6)}
@@ -153,6 +172,14 @@ canvas{display:block}
   <div id="lb-list"></div>
 </div>
 <div id="kill-feed"></div>
+<div id="chat-box">
+  <div id="chat-log"></div>
+  <div id="chat-input-row">
+    <input id="chat-input" placeholder="Nhập tin nhắn… (Enter gửi)" maxlength="120" autocomplete="off" spellcheck="false">
+    <button id="chat-send">➤</button>
+  </div>
+</div>
+<div id="chat-toggle" title="Trò chuyện (Enter)">💬</div>
 <div id="touch-ctl">
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="touch-actions">
@@ -1481,16 +1508,18 @@ addEventListener('pointerup',e=>{
   if(charging)releaseCharge();else if(St.canChop&&!St.isChopping)tryChop();
 });
 addEventListener('keydown',e=>{
-  if(typingInField()){                       // let the user type names / room codes
+  if(typingInField()){                       // let the user type names / room codes / chat
     if(e.key==='Enter'){
-      if(document.activeElement.id==='name-input')saveName();
+      if(document.activeElement.id==='chat-input')sendChat();
+      else if(document.activeElement.id==='name-input')saveName();
       else document.getElementById('mp-join-go').click();
     }
-    if(e.key==='Escape')closeAllPanels();
+    if(e.key==='Escape'){if(document.activeElement.id==='chat-input')closeChatInput();else closeAllPanels()}
     return;
   }
+  if(e.key==='Enter'){e.preventDefault();if(netConnected())openChatInput();return} // Enter = trò chuyện khi chơi mạng
   if(e.key==='Escape'){closeAllPanels();return}
-  if(e.code==='Space'||e.key==='Enter'){e.preventDefault();if(!e.repeat)beginCharge()}
+  if(e.code==='Space'){e.preventDefault();if(!e.repeat)beginCharge()}
   else if(e.key==='f'||e.key==='F'){if(!e.repeat)tryChop()} // F = quick chop, no charge (A is used for strafing)
   else if(e.key==='u'||e.key==='U'){if(!e.repeat)toggleUpg()} // U = upgrade shop
   else if(e.key==='q'||e.key==='Q'){cyclePOV()}
@@ -1501,7 +1530,7 @@ addEventListener('keydown',e=>{
   else if(e.key==='ArrowDown'){povMode=7;orbitPitch=Math.max(0.06,orbitPitch-0.12);showPovLabel()}
 });
 addEventListener('keyup',e=>{
-  if(e.code==='Space'||e.key==='Enter'){e.preventDefault();if(charging)releaseCharge()}
+  if(e.code==='Space'){e.preventDefault();if(charging)releaseCharge()}
 });
 addEventListener('touchstart',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn'))return;},{passive:!0});
 
@@ -1683,6 +1712,71 @@ function feed(html){
   const d=document.createElement('div');d.innerHTML=html;f.appendChild(d);
   setTimeout(()=>d.remove(),4600);
 }
+
+// ============== CHAT (trò chuyện khi chơi mạng) ==============
+const chatBox=document.getElementById('chat-box');
+const chatToggle=document.getElementById('chat-toggle');
+const chatInput=document.getElementById('chat-input');
+function chatAppend(html,cls){
+  const log=document.getElementById('chat-log');
+  const d=document.createElement('div');if(cls)d.className=cls;d.innerHTML=html;
+  log.appendChild(d);log.scrollTop=log.scrollHeight;
+  while(log.children.length>50)log.removeChild(log.firstChild);
+}
+function showChatUI(on){                        // hiện khung chat khi vào mạng
+  chatBox.classList.toggle('on',on);
+  chatToggle.classList.toggle('on',on&&!chatBox.classList.contains('typing'));
+}
+function openChatInput(){
+  chatBox.classList.add('on','typing');chatToggle.classList.remove('on');
+  setTimeout(()=>chatInput.focus(),30);
+}
+function closeChatInput(){
+  chatBox.classList.remove('typing');chatInput.value='';chatInput.blur();
+  chatToggle.classList.add('on');
+}
+function sendChat(){
+  const msg=(chatInput.value||'').trim().slice(0,120);
+  chatInput.value='';
+  if(msg&&netConnected()){
+    broadcast({t:'chat',id:Me.id,name:Me.name,msg});
+    chatAppend('<b>'+escapeHtml(Me.name)+':</b> '+escapeHtml(msg));
+    showBubble(guy,msg);                        // bong bóng thoại trên đầu mình
+  }
+  closeChatInput();
+}
+function recvChat(name,msg){
+  msg=String(msg||'').slice(0,120);
+  if(!msg)return;
+  chatAppend('<b>'+escapeHtml(name)+':</b> '+escapeHtml(msg));
+  showChatUI(!0);
+  // bong bóng trên đầu người gửi (nếu tìm được avatar)
+  for(const p of Object.values(peers))if(p.st.name===name){showBubble(p.av.grp,msg);break}
+}
+// ---- bong bóng thoại nổi trên đầu nhân vật (HTML overlay theo toạ độ 3D) ----
+const bubbles=[];       // {el, obj, life}
+function showBubble(obj3d,text){
+  const el=document.createElement('div');el.className='chat-bubble';el.textContent=text;
+  document.getElementById('ui').appendChild(el);
+  // 1 nhân vật chỉ giữ 1 bong bóng
+  for(let i=bubbles.length-1;i>=0;i--)if(bubbles[i].obj===obj3d){bubbles[i].el.remove();bubbles.splice(i,1)}
+  bubbles.push({el,obj:obj3d,life:4.5});
+}
+const _bv=new T.Vector3();
+function updateBubbles(dt){
+  for(let i=bubbles.length-1;i>=0;i--){
+    const b=bubbles[i];b.life-=dt;
+    if(b.life<=0){b.el.remove();bubbles.splice(i,1);continue}
+    _bv.set(0,2.15,0);b.obj.localToWorld(_bv);_bv.project(cam);
+    if(_bv.z>1){b.el.style.display='none';continue}   // sau lưng camera
+    b.el.style.display='block';
+    b.el.style.left=((_bv.x*.5+.5)*innerWidth)+'px';
+    b.el.style.top=((-_bv.y*.5+.5)*innerHeight)+'px';
+    b.el.style.opacity=b.life<1?b.life:1;
+  }
+}
+document.getElementById('chat-send').addEventListener('click',sendChat);
+chatToggle.addEventListener('click',openChatInput);
 function showDamage(amount,crit){
   const fb=document.getElementById('chop-feedback');
   fb.textContent=(crit?'💥 CHÍ MẠNG -':'⚔️ -')+amount;
@@ -2044,6 +2138,11 @@ function applyMsg(d,fromId){
       onLogSync(d);
       break;
     }
+    case 'chat':{                          // tin nhắn trò chuyện từ người chơi khác
+      const nm=(peers[d.id||fromId]&&peers[d.id||fromId].st.name)||d.name||'Người chơi';
+      recvChat(nm,d.msg);
+      break;
+    }
   }
 }
 // ---------- wire a DataConnection ----------
@@ -2071,6 +2170,7 @@ function wireConn(c,isHostSide){
     }
     setNet(roomMode?'🟢 Đã vào phòng ('+roomPop()+'/'+MAX_PLAYERS+')':'🟢 Đã kết nối — PvP bật!',!0);
     mpPanel.classList.remove('on');
+    showChatUI(!0);chatAppend('💬 Trò chuyện đã bật — nhấn Enter hoặc 💬 để gõ.','sys');
     renderLeaderboard();
   });
   c.on('data',d=>{
@@ -2221,6 +2321,7 @@ function wsConnect(code,asRoom,isHost){
       if(d.waiting){Me.waiting=!0;enterWaiting(d.slot)}
       if(netRole==='host'){mpMsg('✅ Phòng đã mở trên server. Chia sẻ mã/link rồi giữ tab này.')}
       else{setNet(roomMode?'🟢 Đã vào phòng':'🟢 Đã kết nối — PvP bật!',!0);feed('🟢 Đã vào phòng!')}
+      showChatUI(!0);chatAppend('💬 Trò chuyện đã bật — nhấn Enter hoặc 💬 để gõ.','sys');
       wsSend(helloPayload());renderLeaderboard();
       // ask the room for the current shared log so we see the same one
       if(netRole==='guest')broadcast({t:'log',k:'ask',id:Me.id});
@@ -2469,6 +2570,7 @@ function loop(){
   updateRemote(dt);
   updateItems(dt,time);
   updateBuffs(dt);
+  updateBubbles(dt);
 
   // ===== DRAGON-FIRE axe trail (wide additive ribbon) =====
   if(trailOpacity>.02){
