@@ -1052,6 +1052,45 @@ function showFallbackAxe(tint){
 }
 // load the default lava axe on startup
 loadWeaponModel(WEAPONS[0]);
+// ---- REMOTE weapon models: build ONE prototype holder per weapon and clone it
+// onto each opponent's arm so everyone sees what everyone else is wielding. ----
+const weaponProtos={};                   // weaponId -> built holder template
+const weaponProtoCbs={};                 // weaponId -> [callbacks waiting on the load]
+function requestWeaponProto(w,cb){
+  if(!w||!w.model){cb(null);return}
+  if(weaponProtos[w.id]){cb(weaponProtos[w.id]);return}
+  (weaponProtoCbs[w.id]=weaponProtoCbs[w.id]||[]).push(cb);
+  if(weaponProtoCbs[w.id].length>1)return;   // a load is already in flight
+  _gltfLoader.load(w.model,gltf=>{
+    weaponProtos[w.id]=buildWeaponHolder(gltf.scene,w.tint,w.viewScale);
+    (weaponProtoCbs[w.id]||[]).forEach(fn=>fn(weaponProtos[w.id]));weaponProtoCbs[w.id]=[];
+  },undefined,err=>{
+    console.warn('Không tải được model vũ khí (đối thủ) "'+w.model+'"',err);
+    (weaponProtoCbs[w.id]||[]).forEach(fn=>fn(null));weaponProtoCbs[w.id]=[];
+  });
+}
+// swap the weapon MESH shown on a remote avatar to weapon `wid`
+function setRemoteWeapon(p,wid){
+  if(!p||!p.av||p.st.weapon===wid&&p.av._wmShown===wid)return;
+  p.st.weapon=wid;
+  const w=WEAPONS.find(x=>x.id===wid);if(!w)return;
+  requestWeaponProto(w,proto=>{
+    if(p.st.weapon!==wid)return;             // changed again while loading
+    const arm=p.av.rArm;
+    if(p.av._wmodel){arm.remove(p.av._wmodel);p.av._wmodel=null}
+    if(proto){
+      const model=proto.clone(!0);
+      // seat exactly like the local axe pivot (rArm → axe → holder)
+      model.position.set(0,-.36,.04);model.rotation.set(-1.55,0,0);
+      arm.add(model);p.av._wmodel=model;
+      if(p.av.axe)p.av.axe.visible=!1;        // hide the crude stand-in axe
+    }else{
+      // no model → tint the stand-in axe to at least show the weapon colour
+      if(p.av.axe){p.av.axe.visible=!0;p.av.axe.traverse(o=>{if(o.isMesh&&o.material){o.material.color=new T.Color(w.tint);o.material.emissive=new T.Color(w.tint);o.material.needsUpdate=!0}})}
+    }
+    p.av._wmShown=wid;
+  });
+}
 // seat the axe in the hand: haft angled forward so the blade leads the swing
 axe.position.set(0,-.36,.04);
 axe.rotation.set(-1.55,0,0);
@@ -1158,7 +1197,7 @@ function makePeerEntry(id,idx){
   const av=makeRemoteGuy();
   av.setColor(REMOTE_COLORS[idx%REMOTE_COLORS.length]);
   sc.add(av.grp);
-  const st={x:2.5,z:-2,yaw:0,hp:100,hpMax:100,name:'Đối thủ',armX:-0.55,chopping:!1,dead:!1,lvl:1,kills:0,deaths:0,waiting:!1};
+  const st={x:2.5,z:-2,yaw:0,hp:100,hpMax:100,name:'Đối thủ',armX:-0.55,chopping:!1,dead:!1,lvl:1,kills:0,deaths:0,waiting:!1,weapon:'axe'};
   return {av,st,id};
 }
 function getPeer(id){
@@ -2227,6 +2266,7 @@ function equipWeapon(id){
   skillActive=null;guy.rotation.z=0;
   try{localStorage.setItem('boCuiWeapon',id)}catch(e){}
   updateSelfHUD();updateSkillHUD();
+  if(typeof netConnected==='function'&&netConnected())broadcastStats();  // báo đối thủ đổi vũ khí
   const el=document.getElementById('me-weapon');if(el)el.textContent=w.icon+' '+w.name;
 }
 // Two topologies:
@@ -2309,9 +2349,9 @@ function broadcast(obj){
   if(netRole==='host'){ for(const id in conns)rawSend(conns[id],obj); }
   else { rawSend(conns[hostId],{t:'relay',to:'*',msg:obj}); }
 }
-function statsPayload(){return {t:'stats',id:Me.id,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel(),dead:Me.dead,kills:Me.kills,deaths:Me.deaths,waiting:Me.waiting,name:Me.name}}
+function statsPayload(){return {t:'stats',id:Me.id,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel(),dead:Me.dead,kills:Me.kills,deaths:Me.deaths,waiting:Me.waiting,name:Me.name,weapon:curWeapon.id}}
 function broadcastStats(){broadcast(statsPayload())}
-function helloPayload(){return {t:'hello',id:Me.id,name:Me.name,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel(),dead:Me.dead,kills:Me.kills,deaths:Me.deaths,waiting:Me.waiting}}
+function helloPayload(){return {t:'hello',id:Me.id,name:Me.name,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel(),dead:Me.dead,kills:Me.kills,deaths:Me.deaths,waiting:Me.waiting,weapon:curWeapon.id}}
 
 // ---------- apply an incoming message from peer `fromId` ----------
 function applyMsg(d,fromId){
@@ -2331,6 +2371,7 @@ function applyMsg(d,fromId){
       const p=getPeer(pid);
       Object.assign(p.st,{name:d.name||'Đối thủ',hp:d.hp,hpMax:d.hpMax||100,lvl:d.lvl||1,dead:!!d.dead,kills:d.kills||0,deaths:d.deaths||0,waiting:!!d.waiting});
       p.av.setLabel(p.st.name+' Lv.'+p.st.lvl);
+      setRemoteWeapon(p,d.weapon||'axe');    // hiện đúng model vũ khí của họ
       // reply ONCE (only the first time we meet them) so they learn about us —
       // avoids an endless hello ping-pong.
       if(!known)netSendTo(pid,helloPayload());
@@ -2356,6 +2397,7 @@ function applyMsg(d,fromId){
       if(typeof d.kills==='number')p.st.kills=d.kills;
       if(typeof d.deaths==='number')p.st.deaths=d.deaths;
       if(d.name)p.st.name=d.name;
+      if(d.weapon)setRemoteWeapon(p,d.weapon);   // cập nhật model vũ khí khi họ đổi
       renderLeaderboard();
       break;
     }
@@ -2444,10 +2486,10 @@ function wireConn(c,isHostSide){
 function roomPop(){return 1+Object.keys(peers).length}      // total known players incl. me
 function sendRoster(){
   if(netRole!=='host')return;
-  const players=[selfRosterRow(),...Object.values(peers).map(p=>({id:p.id,name:p.st.name,lvl:p.st.lvl,kills:p.st.kills,deaths:p.st.deaths,dead:p.st.dead,waiting:p.st.waiting}))];
+  const players=[selfRosterRow(),...Object.values(peers).map(p=>({id:p.id,name:p.st.name,lvl:p.st.lvl,kills:p.st.kills,deaths:p.st.deaths,dead:p.st.dead,waiting:p.st.waiting,weapon:p.st.weapon}))];
   broadcast({t:'roster',players,queue:players.filter(r=>r.waiting).map(r=>r.id)});
 }
-function selfRosterRow(){return {id:Me.id,name:Me.name,lvl:playerLevel(),kills:Me.kills,deaths:Me.deaths,dead:Me.dead,waiting:Me.waiting}}
+function selfRosterRow(){return {id:Me.id,name:Me.name,lvl:playerLevel(),kills:Me.kills,deaths:Me.deaths,dead:Me.dead,waiting:Me.waiting,weapon:curWeapon.id}}
 function applyRoster(players,queue){
   if(!players)return;
   // create/update avatars for everyone except me; drop peers no longer present
@@ -2457,6 +2499,7 @@ function applyRoster(players,queue){
     seen[r.id]=1;const p=getPeer(r.id);
     Object.assign(p.st,{name:r.name,lvl:r.lvl,kills:r.kills,deaths:r.deaths,dead:r.dead,waiting:r.waiting});
     p.av.setLabel(r.name+' Lv.'+r.lvl);
+    if(r.weapon)setRemoteWeapon(p,r.weapon);
   }
   for(const id in peers)if(!seen[id])removePeer(id);
   setNet('🟢 Trong phòng ('+players.length+'/'+MAX_PLAYERS+')',!0);
