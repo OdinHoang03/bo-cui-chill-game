@@ -157,7 +157,7 @@ canvas{display:block}
     <div class="tbtn" id="tb-chop">🪓<br>BỔ</div>
   </div>
 </div>
-<div id="dead-overlay"><div class="big">💀 BẠN ĐÃ BỊ HẠ</div><div style="opacity:.85;margin-top:8px">Hồi sinh sau <span id="respawn-sec">5</span>s…</div></div>
+<div id="dead-overlay"><div class="big">💀 BẠN ĐÃ BỊ HẠ</div><div style="opacity:.85;margin-top:8px" id="respawn-line">Hồi sinh sau <span id="respawn-sec">5</span>s…</div></div>
 <div id="upg-panel" class="panel">
   <button class="close" onclick="document.getElementById('upg-panel').classList.remove('on')">✕</button>
   <h2>🪵 Nâng cấp sức mạnh</h2>
@@ -178,18 +178,20 @@ canvas{display:block}
   <h2>⚔️ Chơi mạng (PvP)</h2>
   <div class="sub">Đấu rìu với bạn qua kết nối P2P. Một người tạo phòng, người kia nhập mã.</div>
   <div id="mp-idle">
-    <button class="btn" id="mp-host">🏠 Tạo phòng (lấy mã)</button>
+    <div class="sub">Chọn chế độ để tạo phòng:</div>
+    <button class="btn" id="mp-host-1v1">⚔️ Tạo phòng 1v1 (2 người)</button>
+    <button class="btn" id="mp-host-room">👥 Tạo phòng đông (tối đa 8)</button>
     <button class="btn alt" id="mp-join-show">🔑 Nhập mã để vào phòng</button>
   </div>
   <div id="mp-hosting" style="display:none">
-    <div class="sub">Chia sẻ 1 trong 2 cách sau cho bạn của bạn:</div>
+    <div class="sub"><b id="mp-mode-tag">Phòng</b> — chia sẻ 1 trong 2 cách cho bạn bè:</div>
     <div class="note" style="margin-bottom:4px">🔗 Link mời (bấm là vào thẳng):</div>
     <div class="code" id="mp-link" style="font-size:13px;letter-spacing:0;word-break:break-all">…</div>
     <button class="btn" id="mp-copy-link">🔗 Copy link mời</button>
     <div class="note" style="margin:8px 0 4px">…hoặc gửi mã phòng:</div>
     <div class="code" id="mp-code">····</div>
     <button class="btn alt" id="mp-copy">📋 Copy mã</button>
-    <div class="note" style="margin-top:6px">Đang chờ đối thủ kết nối… Giữ tab này mở.</div>
+    <div class="note" style="margin-top:6px">Đang chờ người chơi kết nối… Giữ tab này mở.</div>
   </div>
   <div id="mp-joining" style="display:none">
     <div class="sub">Dán/nhập mã phòng mà người tạo phòng gửi cho bạn:</div>
@@ -244,7 +246,7 @@ const UPGRADES=[
 ];
 const Up={dmg:0,hp:0,speed:0,charge:0,reach:0,crit:0};
 const TITLES=['Tân Binh','Thợ Rừng','Tiều Phu','Phá Mộc','Cường Giả','Bá Vương Rừng Xanh'];
-const Me={hp:100,hpMax:100,dead:!1,respawn:0,name:'Bạn',kills:0,deaths:0};
+const Me={hp:100,hpMax:100,dead:!1,respawn:0,name:'Bạn',kills:0,deaths:0,id:null,waiting:!1};
 function upCost(u){return u.base+u.step*Up[u.id]}
 function totalLevels(){return UPGRADES.reduce((s,u)=>s+Up[u.id],0)}
 function playerLevel(){return 1+totalLevels()}
@@ -956,7 +958,10 @@ function makeRemoteGuy(){
   const hpFg=new T.Sprite(new T.SpriteMaterial({color:0xff5544,transparent:!0,depthTest:!1}));
   hpFg.scale.set(1.16,.09,1);hpFg.position.y=1.62;g.add(hpFg);
   g.visible=!1;
-  return {grp:g,rArm:ra,axe:rax,nameSpr,hpFg,head:h};
+  const handle={grp:g,rArm:ra,axe:rax,nameSpr,hpFg,head:h,shirtMat:rShirt,hatMat:rHat,
+    setColor(hex){rShirt.color.setHex(hex);rHat.color.setHex((hex&0xfefefe)>>1)},
+    setLabel(txt){nameSpr.material.map=makeLabelTex(txt);nameSpr.material.needsUpdate=!0}};
+  return handle;
 }
 // small canvas text label for names
 function makeLabelTex(txt){
@@ -967,9 +972,30 @@ function makeLabelTex(txt){
   x.fillStyle='#fff';x.fillText(txt,128,34);
   return new T.CanvasTexture(c);
 }
-const remote=makeRemoteGuy();sc.add(remote.grp);
-// remote state we interpolate toward
-const Rem={x:2.5,z:-2,yaw:0,hp:100,hpMax:100,connected:!1,name:'Đối thủ',armX:-0.55,chopping:!1,dead:!1,lvl:1,kills:0,deaths:0};
+// ---- multi-player avatar pool (keyed by peer id) ----
+// Up to MAX_PLAYERS-1 remote avatars can be visible at once. Each remote player
+// gets one avatar handle + a state object we interpolate toward.
+const MAX_PLAYERS=8;                 // total players in a room (including me)
+const REMOTE_COLORS=[0xC65B5B,0x5B7FC6,0x6FB05B,0xC6A85B,0xA05BC6,0x5BC6BB,0xC66F9E];
+const peers={};                      // peerId -> {av, st}
+function makePeerEntry(id,idx){
+  const av=makeRemoteGuy();
+  av.setColor(REMOTE_COLORS[idx%REMOTE_COLORS.length]);
+  sc.add(av.grp);
+  const st={x:2.5,z:-2,yaw:0,hp:100,hpMax:100,name:'Đối thủ',armX:-0.55,chopping:!1,dead:!1,lvl:1,kills:0,deaths:0,waiting:!1};
+  return {av,st,id};
+}
+function getPeer(id){
+  if(!peers[id])peers[id]=makePeerEntry(id,Object.keys(peers).length);
+  return peers[id];
+}
+function removePeer(id){
+  const p=peers[id];if(!p)return;
+  sc.remove(p.av.grp);
+  delete peers[id];
+}
+// active (non-waiting, connected) remote players — used for combat/leaderboard
+function activePeers(){return Object.values(peers).filter(p=>!p.st.waiting)}
 
 // player movement state
 const player={vx:0,vz:0};
@@ -1532,7 +1558,7 @@ function buyUpgrade(u){
   const fb=document.getElementById('chop-feedback');
   fb.textContent='⬆️ '+u.name+' Lv.'+Up[u.id];
   fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
-  saveProgress();updateUI();renderUpgrades();netSend({t:'stats'});
+  saveProgress();updateUI();renderUpgrades();if(netConnected())broadcastStats();
 }
 // only one panel visible at a time
 function closeAllPanels(){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'))}
@@ -1552,7 +1578,7 @@ function applyName(n){
   Me.name=n;
   document.getElementById('me-name').textContent=n;
   saveProgress();
-  netSend({t:'hello',name:Me.name,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel()});
+  if(typeof netConnected==='function'&&netConnected())broadcast(helloPayload());
 }
 function openNamePanel(){
   const inp=document.getElementById('name-input');
@@ -1601,90 +1627,112 @@ function showDamage(amount,crit){
 
 // ============== PvP COMBAT ==============
 // The ATTACKER resolves its own swing and tells the victim (authoritative-attacker
-// model — simple & responsive for 1v1). A swing lands if the opponent is inside
-// reach and roughly in front of us.
+// model — simple & responsive). A swing lands on the CLOSEST in-range opponent
+// that is roughly in front of us.
 function tryHitOpponent(dmgBase,chg){
-  if(!Rem.connected||Rem.dead||Me.dead)return !1;
-  const dx=remote.grp.position.x-guy.position.x, dz=remote.grp.position.z-guy.position.z;
-  const dist=Math.hypot(dx,dz);
-  if(dist>attackReach())return !1;
-  const toAng=Math.atan2(dx,dz);
-  const diff=Math.abs(((toAng-GUY_YAW+Math.PI*3)%(Math.PI*2))-Math.PI);
-  if(diff>1.5)return !1;                            // must be facing them (~±85°)
+  if(!netConnected()||Me.dead||Me.waiting)return !1;
+  // find the nearest active, alive opponent within reach & in front
+  let target=null,bestD=1e9;
+  for(const p of activePeers()){
+    if(p.st.dead)continue;
+    const dx=p.av.grp.position.x-guy.position.x, dz=p.av.grp.position.z-guy.position.z;
+    const dist=Math.hypot(dx,dz);
+    if(dist>attackReach())continue;
+    const toAng=Math.atan2(dx,dz);
+    const diff=Math.abs(((toAng-GUY_YAW+Math.PI*3)%(Math.PI*2))-Math.PI);
+    if(diff>1.5)continue;                            // must be facing them (~±85°)
+    if(dist<bestD){bestD=dist;target=p}
+  }
+  if(!target)return !1;
   const crit=Math.random()<critChance();
   const dmg=Math.round(dmgBase*(1+chg*1.2)*(crit?2:1));
-  Rem.hp=Math.max(0,Rem.hp-dmg);
+  target.st.hp=Math.max(0,target.st.hp-dmg);
   showDamage(dmg,crit);
-  feed('⚔️ Bạn đánh <b>'+Rem.name+'</b> −'+dmg+(crit?' 💥':''));
-  netSend({t:'hit',dmg,crit});
-  emitChipsAt(remote.grp.position.x,1.0,remote.grp.position.z,10+Math.round(chg*14),1+chg);
-  if(Rem.hp<=0&&!Rem.dead){
-    Rem.dead=!0;Me.kills++;
+  feed('⚔️ Bạn đánh <b>'+escapeHtml(target.st.name)+'</b> −'+dmg+(crit?' 💥':''));
+  // tell the victim directly (and, if I'm host, they hear it; if I'm guest, host relays)
+  netSendTo(target.id,{t:'hit',dmg,crit,from:Me.id,fromName:Me.name});
+  emitChipsAt(target.av.grp.position.x,1.0,target.av.grp.position.z,10+Math.round(chg*14),1+chg);
+  if(target.st.hp<=0&&!target.st.dead){
+    target.st.dead=!0;Me.kills++;
     St.wood+=5;St.score+=50;                        // bounty for a kill
-    feed('💀 Bạn đã hạ <b>'+Rem.name+'</b>! +5🪵 +50đ');
-    audio.split();saveProgress();renderLeaderboard();netSend({t:'stats'});
+    feed('💀 Bạn đã hạ <b>'+escapeHtml(target.st.name)+'</b>! +5🪵 +50đ');
+    audio.split();saveProgress();renderLeaderboard();broadcastStats();
   }
   updateUI();return !0;
 }
 let lastHurt=0;
 function takeDamage(dmg,crit,fromName){
-  if(Me.dead)return;
+  if(Me.dead||Me.waiting)return;
   lastHurt=performance.now();
   Me.hp=Math.max(0,Me.hp-dmg);
-  feed('🩸 <b>'+(fromName||Rem.name)+'</b> đánh bạn −'+dmg+(crit?' 💥':''));
+  feed('🩸 <b>'+escapeHtml(fromName||'Đối thủ')+'</b> đánh bạn −'+dmg+(crit?' 💥':''));
   document.body.style.animation='shake .25s ease-out';setTimeout(()=>document.body.style.animation='',250);
   emitChipsAt(guy.position.x,1.0,guy.position.z,8,1);
   if(Me.hp<=0)die();
-  updateUI();netSend({t:'stats'});
+  updateUI();broadcastStats();
 }
 function die(){
   Me.dead=!0;Me.deaths++;Me.respawn=5;
   document.getElementById('dead-overlay').classList.add('on');
   feed('💀 Bạn đã bị hạ');
-  saveProgress();netSend({t:'died'});netSend({t:'stats'});renderLeaderboard();
+  saveProgress();
+  broadcast({t:'died',id:Me.id});broadcastStats();renderLeaderboard();
+  // in ROOM (8-player) mode, dying may hand your slot to someone waiting
+  if(roomMode&&netRole==='host')hostHandleDeath(Me.id);
+  else if(roomMode&&netRole==='guest')netSendTo(hostId,{t:'req-death',id:Me.id});
 }
 function respawnMe(){
+  // if we've been pushed to the waiting queue, do NOT respawn into the arena
+  if(Me.waiting){document.getElementById('dead-overlay').classList.remove('on');return}
   Me.dead=!1;Me.hp=maxHP();
   const a=Math.random()*Math.PI*2, r=6+Math.random()*4;
   guy.position.set(Math.cos(a)*r,0,Math.sin(a)*r);
   document.getElementById('dead-overlay').classList.remove('on');
-  updateUI();netSend({t:'respawn',hp:Me.hp});netSend({t:'stats'});
+  updateUI();broadcast({t:'respawn',id:Me.id,hp:Me.hp});broadcastStats();
 }
 function regen(dt){
-  if(Me.dead)return;
+  if(Me.dead||Me.waiting)return;
   if(Me.hp<maxHP()&&performance.now()-lastHurt>4000){
     Me.hp=Math.min(maxHP(),Me.hp+dt*(3+Up.hp));
     updateSelfHUD();
   }
 }
 function updateDeath(dt){
-  if(!Me.dead)return;
+  if(!Me.dead||Me.waiting)return;
   Me.respawn-=dt;
   document.getElementById('respawn-sec').textContent=Math.max(0,Math.ceil(Me.respawn));
   if(Me.respawn<=0)respawnMe();
 }
 
-// ============== MULTIPLAYER (PeerJS / WebRTC P2P) ==============
-let peer=null, conn=null, netRole=null;
+// ============== MULTIPLAYER (PeerJS / WebRTC) ==============
+// Two topologies:
+//  • 1v1   — direct P2P, exactly 2 players (the original mode).
+//  • room  — star: the HOST is the relay/authority. Guests connect to the host;
+//            the host rebroadcasts everyone's state, owns the roster + a waiting
+//            queue, and rotates a waiting player in whenever an active slot frees
+//            up (someone dies while the arena is full, or someone leaves).
+let peer=null, netRole=null;         // 'host' | 'guest'
+let roomMode=!1;                     // false = 1v1, true = up to 8
+let hostId=null;                     // guest: the host's peer id
+let myCode=null;
+const conns={};                      // peerId -> DataConnection (host holds many; guest holds just the host)
 const netStatus=document.getElementById('net-status');
 const mpPanel=document.getElementById('mp-panel');
 function setNet(txt,show){netStatus.textContent=txt;netStatus.classList.toggle('on',show!==!1)}
 function mpMsg(t){document.getElementById('mp-msg').textContent=t}
 function roomCode(){let s='';const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';for(let i=0;i<6;i++)s+=A[Math.floor(Math.random()*A.length)];return s}
 const PEER_PREFIX='bocui3d-';
-// build a shareable invite URL that carries the room code in the hash (#room=CODE)
-function inviteUrl(code){
-  const base=location.origin+location.pathname;
-  return base+'#room='+code;
-}
-// read a room code from the current URL (?room= or #room=)
+function netConnected(){return Object.keys(conns).length>0}
+// invite URL carries the code and the mode (#room=CODE&m=r|1)
+function inviteUrl(code){return location.origin+location.pathname+'#room='+code+'&m='+(roomMode?'r':'1')}
 function roomFromUrl(){
-  let code='';
-  const h=location.hash||'';
-  const m=h.match(/room=([A-Za-z0-9]+)/);
-  if(m)code=m[1];
-  if(!code){const q=new URLSearchParams(location.search);code=q.get('room')||''}
-  return code.trim().toUpperCase();
+  const h=location.hash||'', q=new URLSearchParams(location.search);
+  let code='',mode='';
+  const m=h.match(/room=([A-Za-z0-9]+)/);if(m)code=m[1];
+  const mm=h.match(/[#&]m=([r1])/);if(mm)mode=mm[1];
+  if(!code)code=q.get('room')||'';
+  if(!mode)mode=q.get('m')||'';
+  return {code:code.trim().toUpperCase(),room:mode==='r'};
 }
 function ensurePeer(id){
   if(typeof Peer==='undefined'){mpMsg('❌ Không tải được PeerJS (kiểm tra mạng).');return null}
@@ -1695,103 +1743,254 @@ function ensurePeer(id){
   });
   return peer;
 }
-function wireConn(c){
-  conn=c;
-  conn.on('open',()=>{
-    Rem.connected=!0;
-    setNet('🟢 Đã kết nối — PvP bật!',!0);
-    mpPanel.classList.remove('on');
-    remote.grp.visible=!0;
-    feed('🟢 Đối thủ đã kết nối!');
-    netSend({t:'hello',name:Me.name,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel()});
-    renderLeaderboard();
-  });
-  conn.on('data',onNetData);
-  conn.on('close',()=>{
-    Rem.connected=!1;remote.grp.visible=!1;
-    setNet('🔌 Đối thủ đã ngắt kết nối',!0);feed('🔌 Đối thủ đã rời phòng');
-    renderLeaderboard();
-  });
-  conn.on('error',()=>{setNet('🔌 Lỗi kết nối',!0)});
+// ---------- send helpers ----------
+function rawSend(c,obj){try{if(c&&c.open)c.send(obj)}catch(e){}}
+function netSendTo(id,obj){
+  // route a message to a specific peer. Guests can only reach the host directly,
+  // so anything aimed at another guest is relayed by the host.
+  if(netRole==='host'){ if(conns[id])rawSend(conns[id],obj); }
+  else { rawSend(conns[hostId],{t:'relay',to:id,msg:obj}); }
 }
-function netSend(obj){
-  if(!conn||!conn.open)return;
-  try{
-    if(obj.t==='stats'){obj.hp=Me.hp;obj.hpMax=maxHP();obj.lvl=playerLevel();obj.dead=Me.dead;obj.kills=Me.kills;obj.deaths=Me.deaths}
-    conn.send(obj);
-  }catch(e){}
+function broadcast(obj){
+  // send to everyone. Host → all conns. Guest → host, which relays to all others.
+  if(netRole==='host'){ for(const id in conns)rawSend(conns[id],obj); }
+  else { rawSend(conns[hostId],{t:'relay',to:'*',msg:obj}); }
 }
-function onNetData(d){
+function statsPayload(){return {t:'stats',id:Me.id,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel(),dead:Me.dead,kills:Me.kills,deaths:Me.deaths,waiting:Me.waiting,name:Me.name}}
+function broadcastStats(){broadcast(statsPayload())}
+function helloPayload(){return {t:'hello',id:Me.id,name:Me.name,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel(),dead:Me.dead,kills:Me.kills,deaths:Me.deaths,waiting:Me.waiting}}
+
+// ---------- apply an incoming message from peer `fromId` ----------
+function applyMsg(d,fromId){
   if(!d||!d.t)return;
   switch(d.t){
-    case 'hello':
-      Rem.name=d.name||'Đối thủ';Rem.hp=d.hp;Rem.hpMax=d.hpMax||100;Rem.lvl=d.lvl||1;
-      remote.nameSpr.material.map=makeLabelTex(Rem.name+' Lv.'+Rem.lvl);
-      remote.nameSpr.material.needsUpdate=!0;
-      netSend({t:'stats'});renderLeaderboard();
+    case 'relay':{                       // host received a guest→someone message
+      if(netRole!=='host')break;
+      const msg=d.msg;msg._via=fromId;
+      if(d.to==='*'){ for(const id in conns)if(id!==fromId)rawSend(conns[id],msg); applyMsg(msg,fromId); }
+      else if(d.to===Me.id){ applyMsg(msg,fromId); }
+      else if(conns[d.to]){ rawSend(conns[d.to],msg); }
       break;
-    case 'pos':
-      Rem.x=d.x;Rem.z=d.z;Rem.yaw=d.yaw;Rem.armX=d.armX;Rem.chopping=!!d.ch;
-      break;
-    case 'hit':                                     // they hit US
-      takeDamage(d.dmg,d.crit,Rem.name);
-      break;
-    case 'stats':
-      Rem.hp=d.hp;Rem.hpMax=d.hpMax||100;Rem.dead=!!d.dead;Rem.lvl=d.lvl||Rem.lvl;
-      if(typeof d.kills==='number')Rem.kills=d.kills;
-      if(typeof d.deaths==='number')Rem.deaths=d.deaths;
+    }
+    case 'hello':{
+      const p=getPeer(d.id||fromId);
+      Object.assign(p.st,{name:d.name||'Đối thủ',hp:d.hp,hpMax:d.hpMax||100,lvl:d.lvl||1,dead:!!d.dead,kills:d.kills||0,deaths:d.deaths||0,waiting:!!d.waiting});
+      p.av.setLabel(p.st.name+' Lv.'+p.st.lvl);
+      // reply so they learn about us too
+      netSendTo(d.id||fromId,helloPayload());
+      if(netRole==='host')sendRoster();
       renderLeaderboard();
       break;
-    case 'died':
-      Rem.dead=!0;feed('💀 <b>'+Rem.name+'</b> đã bị hạ');renderLeaderboard();
+    }
+    case 'pos':{
+      const p=getPeer(d.id||fromId);
+      p.st.x=d.x;p.st.z=d.z;p.st.yaw=d.yaw;p.st.armX=d.armX;p.st.chopping=!!d.ch;
       break;
-    case 'respawn':
-      Rem.dead=!1;Rem.hp=d.hp||Rem.hpMax;renderLeaderboard();
+    }
+    case 'hit':                          // this message is addressed to ME
+      takeDamage(d.dmg,d.crit,d.fromName);
       break;
+    case 'stats':{
+      const p=getPeer(d.id||fromId);
+      Object.assign(p.st,{hp:d.hp,hpMax:d.hpMax||100,dead:!!d.dead,lvl:d.lvl||p.st.lvl,waiting:!!d.waiting});
+      if(typeof d.kills==='number')p.st.kills=d.kills;
+      if(typeof d.deaths==='number')p.st.deaths=d.deaths;
+      if(d.name)p.st.name=d.name;
+      renderLeaderboard();
+      break;
+    }
+    case 'died':{
+      const p=getPeer(d.id||fromId);p.st.dead=!0;
+      feed('💀 <b>'+escapeHtml(p.st.name)+'</b> đã bị hạ');renderLeaderboard();
+      break;
+    }
+    case 'respawn':{
+      const p=getPeer(d.id||fromId);p.st.dead=!1;p.st.hp=d.hp||p.st.hpMax;renderLeaderboard();
+      break;
+    }
+    case 'req-death':                    // guest tells host "I died" (room mode)
+      if(netRole==='host')hostHandleDeath(d.id||fromId);
+      break;
+    case 'roster':                       // host → guests: full player list + queue
+      applyRoster(d.players,d.queue);
+      break;
+    case 'setWaiting':                   // host tells a specific player to wait / play
+      Me.waiting=!!d.waiting;
+      if(Me.waiting){enterWaiting(d.reason)}else{leaveWaiting()}
+      break;
+    case 'bye':{
+      removePeer(d.id||fromId);renderLeaderboard();
+      break;
+    }
   }
 }
-// ---------- leaderboard (only shown while connected) ----------
+// ---------- wire a DataConnection ----------
+function wireConn(c,isHostSide){
+  c.on('open',()=>{
+    conns[c.peer]=c;
+    if(isHostSide){
+      // a guest just joined our room
+      feed('🟢 <b>'+escapeHtml(c.metadata&&c.metadata.name||'Người chơi')+'</b> đã vào phòng');
+      // decide active vs waiting based on current occupancy
+      const active=1+activePeers().length;    // me + current active remotes
+      const willWait=roomMode&&active>=MAX_PLAYERS;
+      const p=getPeer(c.peer);p.st.waiting=willWait;
+      rawSend(c,{t:'welcome',hostId:Me.id,room:roomMode,waiting:willWait,slot:willWait?'Phòng đang đầy — bạn vào hàng chờ':''});
+      rawSend(c,helloPayload());
+      // tell the new guest about all existing players
+      for(const id in peers)if(id!==c.peer)rawSend(c,{t:'hello',id,name:peers[id].st.name,hp:peers[id].st.hp,hpMax:peers[id].st.hpMax,lvl:peers[id].st.lvl,dead:peers[id].st.dead,kills:peers[id].st.kills,deaths:peers[id].st.deaths,waiting:peers[id].st.waiting});
+      sendRoster();
+    }else{
+      // I'm the guest; connection to host is open
+      hostId=c.peer;
+      rawSend(c,{...helloPayload(),name:Me.name});
+    }
+    setNet(roomMode?'🟢 Đã vào phòng ('+roomPop()+'/'+MAX_PLAYERS+')':'🟢 Đã kết nối — PvP bật!',!0);
+    mpPanel.classList.remove('on');
+    renderLeaderboard();
+  });
+  c.on('data',d=>{
+    if(d&&d.t==='welcome'){                // guest learns its role/slot from host
+      hostId=c.peer;roomMode=!!d.room;
+      if(d.waiting){Me.waiting=!0;enterWaiting(d.slot)}
+      broadcastStats();
+      return;
+    }
+    applyMsg(d,c.peer);
+  });
+  c.on('close',()=>{
+    const nm=peers[c.peer]?peers[c.peer].st.name:'Người chơi';
+    delete conns[c.peer];removePeer(c.peer);
+    feed('🔌 <b>'+escapeHtml(nm)+'</b> đã rời phòng');
+    if(netRole==='host'){promoteFromQueue();sendRoster()}
+    if(!netConnected())setNet('🔌 Đã ngắt kết nối',!0);
+    renderLeaderboard();
+  });
+  c.on('error',()=>{});
+}
+// ---------- host roster + waiting queue ----------
+function roomPop(){return 1+Object.keys(peers).length}      // total known players incl. me
+function sendRoster(){
+  if(netRole!=='host')return;
+  const players=[selfRosterRow(),...Object.values(peers).map(p=>({id:p.id,name:p.st.name,lvl:p.st.lvl,kills:p.st.kills,deaths:p.st.deaths,dead:p.st.dead,waiting:p.st.waiting}))];
+  broadcast({t:'roster',players,queue:players.filter(r=>r.waiting).map(r=>r.id)});
+}
+function selfRosterRow(){return {id:Me.id,name:Me.name,lvl:playerLevel(),kills:Me.kills,deaths:Me.deaths,dead:Me.dead,waiting:Me.waiting}}
+function applyRoster(players,queue){
+  if(!players)return;
+  // create/update avatars for everyone except me; drop peers no longer present
+  const seen={};
+  for(const r of players){
+    if(r.id===Me.id){continue}
+    seen[r.id]=1;const p=getPeer(r.id);
+    Object.assign(p.st,{name:r.name,lvl:r.lvl,kills:r.kills,deaths:r.deaths,dead:r.dead,waiting:r.waiting});
+    p.av.setLabel(r.name+' Lv.'+r.lvl);
+  }
+  for(const id in peers)if(!seen[id])removePeer(id);
+  setNet('🟢 Trong phòng ('+players.length+'/'+MAX_PLAYERS+')',!0);
+  renderLeaderboard();
+}
+// when a player dies in a FULL room, hand their active slot to the first waiter
+function hostHandleDeath(deadId){
+  if(!roomMode||netRole!=='host')return;
+  const waiters=[...Object.values(peers).filter(p=>p.st.waiting)];
+  const meWaitingCount=Me.waiting?1:0;
+  const totalWaiting=waiters.length+meWaitingCount;
+  if(totalWaiting===0)return;             // nobody waiting → normal respawn, keep slot
+  // the dead player goes to the back of the queue…
+  const firstWaiter=waiters[0];
+  if(!firstWaiter)return;
+  // push dead → waiting, pull firstWaiter → active
+  if(deadId===Me.id){Me.waiting=!0;enterWaiting('Bạn đã hết lượt — chờ tới lượt vào lại')}
+  else if(peers[deadId]){peers[deadId].st.waiting=!0;netSendTo(deadId,{t:'setWaiting',waiting:!0,reason:'Bạn đã hết lượt — chờ tới lượt vào lại'})}
+  firstWaiter.st.waiting=!1;
+  netSendTo(firstWaiter.id,{t:'setWaiting',waiting:!1});
+  feed('🔄 <b>'+escapeHtml(firstWaiter.st.name)+'</b> được vào thay chỗ');
+  sendRoster();
+}
+// on disconnect, if an active slot is now free, promote a waiter
+function promoteFromQueue(){
+  if(!roomMode||netRole!=='host')return;
+  const active=1+activePeers().length;
+  if(active>=MAX_PLAYERS)return;
+  const waiter=Object.values(peers).find(p=>p.st.waiting);
+  if(waiter){
+    waiter.st.waiting=!1;netSendTo(waiter.id,{t:'setWaiting',waiting:!1});
+    feed('🔄 <b>'+escapeHtml(waiter.st.name)+'</b> được vào sân');
+  }else if(Me.waiting){
+    Me.waiting=!1;leaveWaiting();broadcastStats();
+  }
+}
+// ---------- being in the waiting queue (local UI) ----------
+function enterWaiting(reason){
+  Me.waiting=!0;Me.dead=!0;
+  guy.visible=!1;
+  const ov=document.getElementById('dead-overlay');ov.classList.add('on','waiting');
+  ov.querySelector('.big').textContent='⏳ ĐANG CHỜ LƯỢT';
+  const sub=ov.querySelector('#respawn-line');if(sub)sub.textContent=reason||'Chờ một người bị hạ để vào sân';
+  broadcastStats();renderLeaderboard();
+}
+function leaveWaiting(){
+  Me.waiting=!1;Me.dead=!1;Me.hp=maxHP();
+  guy.visible=!0;
+  const a=Math.random()*Math.PI*2,r=6+Math.random()*4;guy.position.set(Math.cos(a)*r,0,Math.sin(a)*r);
+  const ov=document.getElementById('dead-overlay');ov.classList.remove('on','waiting');
+  ov.querySelector('.big').textContent='💀 BẠN ĐÃ BỊ HẠ';
+  feed('✅ Bạn đã vào sân!');
+  updateUI();broadcast({t:'respawn',id:Me.id,hp:Me.hp});broadcastStats();
+}
+
+// ---------- leaderboard (shown while connected) ----------
 const lbEl=document.getElementById('leaderboard');
 function renderLeaderboard(){
-  if(!Rem.connected){lbEl.classList.remove('on');return}
+  if(!netConnected()){lbEl.classList.remove('on');return}
   lbEl.classList.add('on');
-  const rows=[
-    {me:!0,  name:Me.name,  lvl:playerLevel(), k:Me.kills,  d:Me.deaths,  dead:Me.dead},
-    {me:!1,  name:Rem.name, lvl:Rem.lvl||1,    k:Rem.kills||0, d:Rem.deaths||0, dead:Rem.dead},
-  ];
-  // rank by kills desc, then fewest deaths
+  const rows=[{me:!0,name:Me.name,lvl:playerLevel(),k:Me.kills,d:Me.deaths,dead:Me.dead,waiting:Me.waiting}];
+  for(const p of Object.values(peers))rows.push({me:!1,name:p.st.name,lvl:p.st.lvl||1,k:p.st.kills||0,d:p.st.deaths||0,dead:p.st.dead,waiting:p.st.waiting});
   rows.sort((a,b)=>(b.k-a.k)||(a.d-b.d));
-  const medal=['🥇','🥈'];
+  const medal=['🥇','🥈','🥉'];
+  const title=document.querySelector('#leaderboard h3');
+  if(title)title.textContent='🏆 XẾP HẠNG ('+rows.length+'/'+MAX_PLAYERS+')';
   document.getElementById('lb-list').innerHTML=rows.map((r,i)=>
     '<div class="lb-row'+(r.me?' me':'')+(r.dead?' dead':'')+'">'+
       '<span class="rk">'+(medal[i]||(i+1))+'</span>'+
-      '<span class="who">'+escapeHtml(r.name)+' <small>Lv.'+r.lvl+'</small>'+(r.dead?' 💀':'')+'</span>'+
+      '<span class="who">'+escapeHtml(r.name)+' <small>Lv.'+r.lvl+'</small>'+(r.waiting?' ⏳':(r.dead?' 💀':''))+'</span>'+
       '<span class="kd"><span class="k">'+r.k+'</span>/<span class="d">'+r.d+'</span></span>'+
     '</div>'
   ).join('');
 }
 function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
 document.getElementById('mp-btn').addEventListener('click',()=>{
   const wasOn=mpPanel.classList.contains('on');
   closeAllPanels();
   if(!wasOn)mpPanel.classList.add('on');
 });
-document.getElementById('mp-host').addEventListener('click',()=>{
-  const code=roomCode();
+function startHosting(asRoom){
+  roomMode=!!asRoom;
+  const code=roomCode();myCode=code;Me.id=PEER_PREFIX+code;
   document.getElementById('mp-idle').style.display='none';
   document.getElementById('mp-hosting').style.display='block';
   document.getElementById('mp-code').textContent=code;
   document.getElementById('mp-link').textContent=inviteUrl(code);
+  document.getElementById('mp-mode-tag').textContent=roomMode?'👥 Phòng đông (tối đa 8 người)':'⚔️ Phòng 1v1';
   mpMsg('Đang mở phòng…');netRole='host';
   const p=ensurePeer(code);if(!p)return;
-  p.on('open',()=>{mpMsg('✅ Phòng đã mở. Chờ đối thủ…');setNet('🟡 Đang chờ đối thủ — mã '+code,!0)});
-  p.on('connection',c=>{mpMsg('✅ Đối thủ đang vào…');wireConn(c)});
-});
+  p.on('open',id=>{Me.id=id;mpMsg('✅ Phòng đã mở. Chờ người chơi…');setNet(roomMode?'🟡 Phòng đông đang chờ — mã '+code:'🟡 Đang chờ đối thủ — mã '+code,!0);renderLeaderboard()});
+  p.on('connection',c=>{
+    // reject if a 1v1 room already has its one guest
+    if(!roomMode&&Object.keys(conns).length>=1){rawSend(c,{t:'full'});setTimeout(()=>c.close(),300);return}
+    if(roomMode&&roomPop()>=MAX_PLAYERS+ /*allow queue*/ 4){rawSend(c,{t:'full'});setTimeout(()=>c.close(),300);return}
+    wireConn(c,!0);
+  });
+}
+document.getElementById('mp-host-1v1').addEventListener('click',()=>startHosting(!1));
+document.getElementById('mp-host-room').addEventListener('click',()=>startHosting(!0));
 document.getElementById('mp-join-show').addEventListener('click',()=>{
   document.getElementById('mp-idle').style.display='none';
   document.getElementById('mp-joining').style.display='block';
   const inp=document.getElementById('mp-code-input');
-  inp.value='';inp.focus();                      // cursor lands in the box right away
+  inp.value='';inp.focus();
 });
 document.getElementById('mp-back').addEventListener('click',()=>{
   document.getElementById('mp-joining').style.display='none';
@@ -1806,48 +2005,57 @@ document.getElementById('mp-copy').addEventListener('click',async()=>{
 document.getElementById('mp-copy-link').addEventListener('click',async()=>{
   const url=document.getElementById('mp-link').textContent;
   try{
-    // native share sheet on mobile if available, else clipboard
     if(navigator.share){await navigator.share({title:'Bổ Củi Chill 3D — vào đấu với mình!',text:'Bấm link để vào phòng PvP:',url});mpMsg('🔗 Đã mở khung chia sẻ.')}
     else{await navigator.clipboard.writeText(url);mpMsg('🔗 Đã copy link mời!')}
   }catch(e){mpMsg('⚠️ Không copy được — hãy chọn và copy link thủ công.')}
 });
-// typing the code: force uppercase, Enter submits
 document.getElementById('mp-code-input').addEventListener('input',e=>{
   e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
 });
-// core join routine, reused by manual entry AND by invite links
-function joinRoom(code){
+// join a room by code (manual entry or invite link). asRoom hint from the link.
+function joinRoom(code,asRoom){
   code=(code||'').trim().toUpperCase();
   if(code.length<4){mpMsg('⚠️ Mã phòng không hợp lệ.');return}
+  roomMode=!!asRoom;                    // provisional; host confirms via 'welcome'
   mpMsg('Đang kết nối tới '+code+'…');setNet('🟡 Đang kết nối…',!0);netRole='guest';
   const p=ensurePeer(null);if(!p)return;
-  p.on('open',()=>{wireConn(p.connect(PEER_PREFIX+code,{reliable:!0}))});
+  p.on('open',id=>{
+    Me.id=id;
+    const c=p.connect(PEER_PREFIX+code,{reliable:!0,metadata:{name:Me.name}});
+    c.on('data',d=>{ if(d&&d.t==='full'){mpMsg('❌ Phòng đã đầy.');setNet('🔌 Phòng đầy',!0)} });
+    wireConn(c,!1);
+  });
 }
 document.getElementById('mp-join-go').addEventListener('click',()=>{
-  joinRoom(document.getElementById('mp-code-input').value);
+  joinRoom(document.getElementById('mp-code-input').value,roomMode);
 });
-// stream our position ~15×/s
+addEventListener('beforeunload',()=>{try{broadcast({t:'bye',id:Me.id})}catch(e){}});
+
+// stream our position ~15×/s to everyone
 let netTick=0;
 function netUpdate(dt){
-  if(!conn||!conn.open)return;
+  if(!netConnected()||Me.waiting)return;
   netTick+=dt;
   if(netTick<0.066)return;netTick=0;
-  netSend({t:'pos',x:+guy.position.x.toFixed(2),z:+guy.position.z.toFixed(2),yaw:+GUY_YAW.toFixed(2),armX:+rArm.rotation.x.toFixed(2),ch:St.isChopping});
+  broadcast({t:'pos',id:Me.id,x:+guy.position.x.toFixed(2),z:+guy.position.z.toFixed(2),yaw:+GUY_YAW.toFixed(2),armX:+rArm.rotation.x.toFixed(2),ch:St.isChopping});
 }
+// interpolate & draw every remote avatar
 function updateRemote(dt){
-  if(!Rem.connected){remote.grp.visible=!1;return}
-  const g=remote.grp;
-  g.position.x+=(Rem.x-g.position.x)*Math.min(1,dt*10);
-  g.position.z+=(Rem.z-g.position.z)*Math.min(1,dt*10);
-  const dy=((Rem.yaw-g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
-  g.rotation.y+=dy*Math.min(1,dt*10);
-  remote.rArm.rotation.x+=(Rem.armX-remote.rArm.rotation.x)*Math.min(1,dt*14);
-  const p=Math.max(0,Math.min(1,Rem.hp/(Rem.hpMax||100)));
-  remote.hpFg.scale.x=1.16*p;
-  remote.hpFg.material.color.setHex(p<0.35?0xff3333:0xff7744);
-  const targetY=Rem.dead?-0.7:0;
-  g.position.y+=(targetY-g.position.y)*Math.min(1,dt*4);
-  g.visible=!0;
+  for(const p of Object.values(peers)){
+    const g=p.av.grp, st=p.st;
+    if(st.waiting){g.visible=!1;continue}
+    g.position.x+=(st.x-g.position.x)*Math.min(1,dt*10);
+    g.position.z+=(st.z-g.position.z)*Math.min(1,dt*10);
+    const dy=((st.yaw-g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+    g.rotation.y+=dy*Math.min(1,dt*10);
+    p.av.rArm.rotation.x+=(st.armX-p.av.rArm.rotation.x)*Math.min(1,dt*14);
+    const hpp=Math.max(0,Math.min(1,st.hp/(st.hpMax||100)));
+    p.av.hpFg.scale.x=1.16*hpp;
+    p.av.hpFg.material.color.setHex(hpp<0.35?0xff3333:0xff7744);
+    const targetY=st.dead?-0.7:0;
+    g.position.y+=(targetY-g.position.y)*Math.min(1,dt*4);
+    g.visible=!0;
+  }
 }
 
 // ============== PLAYER MOVEMENT + TARGET SELECTION ==============
@@ -1896,16 +2104,20 @@ function updatePlayer(dt,time){
     if(d<attackReach()&&d<bestD){bestD=d;best={type:'tree',tree:tr}}
   }
   chopTarget=best||{type:'log'};
-  // is the opponent within striking distance?
-  let enemyD=1e9;
-  if(Rem.connected&&!Rem.dead){
-    enemyD=Math.hypot(guy.position.x-remote.grp.position.x,guy.position.z-remote.grp.position.z);
+  // is any opponent within striking distance? (nearest active, alive)
+  let enemyD=1e9, enemyName='', enemyHp=0, enemyPos=null;
+  if(netConnected()&&!Me.waiting){
+    for(const p of activePeers()){
+      if(p.st.dead)continue;
+      const d=Math.hypot(guy.position.x-p.av.grp.position.x,guy.position.z-p.av.grp.position.z);
+      if(d<enemyD){enemyD=d;enemyName=p.st.name;enemyHp=p.st.hp;enemyPos=p.av.grp.position}
+    }
   }
-  const enemyInRange=enemyD<=attackReach();
+  const enemyInRange=enemyD<=attackReach()&&enemyPos;
   // when idle & not chopping, face the enemy if close, else the wood target
   if(!moving&&!St.isChopping){
     let ang;
-    if(enemyInRange)ang=Math.atan2(remote.grp.position.x-guy.position.x,remote.grp.position.z-guy.position.z);
+    if(enemyInRange)ang=Math.atan2(enemyPos.x-guy.position.x,enemyPos.z-guy.position.z);
     else if(chopTarget.type==='tree')ang=Math.atan2(chopTarget.tree.x-guy.position.x,chopTarget.tree.z-guy.position.z);
     else ang=Math.atan2(0-guy.position.x,0-guy.position.z);
     GUY_YAW=ang;
@@ -1913,7 +2125,7 @@ function updatePlayer(dt,time){
   // update prompt label
   const pr=document.getElementById('target-label');
   if(pr){
-    if(enemyInRange)pr.textContent='⚔️ Tấn công '+Rem.name+' (HP '+Math.max(0,Math.ceil(Rem.hp))+')';
+    if(enemyInRange)pr.textContent='⚔️ Tấn công '+enemyName+' (HP '+Math.max(0,Math.ceil(enemyHp))+')';
     else if(chopTarget.type==='tree')pr.textContent='🌲 Bấm để đốn cây (HP '+Math.max(0,chopTarget.tree.hp)+')';
     else pr.textContent='';
   }
@@ -2112,18 +2324,17 @@ cam.position.set(-6.5,4.2,6.5);
 loop();
 addEventListener('beforeunload',saveProgress);
 
-// ---- auto-join from an invite link (#room=CODE) ----
+// ---- auto-join from an invite link (#room=CODE&m=r|1) ----
 (function autoJoinFromLink(){
-  const code=roomFromUrl();
+  const {code,room}=roomFromUrl();
   if(!code)return;
-  // open the multiplayer panel and connect straight away
   closeAllPanels();mpPanel.classList.add('on');
   document.getElementById('mp-idle').style.display='none';
   document.getElementById('mp-joining').style.display='block';
   const inp=document.getElementById('mp-code-input');
   if(inp)inp.value=code;
   mpMsg('🔗 Vào phòng từ link mời: '+code);
-  joinRoom(code);
+  joinRoom(code,room);
 })();
 console.log('🌲 Bổ Củi Chill Guy 3D 🪓 — sẵn sàng!');
 </script>
