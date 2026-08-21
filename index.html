@@ -2381,8 +2381,11 @@ const Boss={active:!1,grp:null,head:null,jaw:null,legL:null,legR:null,armL:null,
   attackCd:0,anim:0,animT:0,biteSeq:0,lastBiteSeq:0,bitDone:!1,walk:0,spawnFx:0};
 function bossAuthority(){
   if(!netConnected())return !0;                 // chơi đơn: tự làm trọng tài
-  if(netMode==='ws')return roomAuthId===Me.id;  // WS: server chỉ định (bền qua F5, tự chuyển khi chủ rời)
-  return netRole==='host';                      // P2P: chủ phòng
+  if(netMode==='ws'){
+    if(roomAuthId)return roomAuthId===Me.id;    // server mới: trọng tài do server chỉ định (bền qua F5)
+    return netRole==='host';                    // server cũ chưa gửi authId → tạm dùng chủ phòng
+  }
+  return netRole==='host';                       // P2P: chủ phòng
 }
 // hẹn giờ boss xuất hiện theo ĐỒNG HỒ TƯỜNG (Date.now) — bền qua F5 nhờ lưu mốc
 // tuyệt đối vào localStorage; performance.now reset khi tải lại nên KHÔNG dùng.
@@ -2580,13 +2583,13 @@ let bossNetTick=0;
 let bossTimerNetTick=0;
 function broadcastBoss(){
   if(!netConnected()||!bossAuthority())return;
-  broadcast({t:'boss',hp:Boss.hp,hpMax:Boss.hpMax,x:+Boss.grp.position.x.toFixed(2),z:+Boss.grp.position.z.toFixed(2),yaw:+Boss.yaw.toFixed(2),bite:Boss.biteSeq});
+  broadcast({t:'boss',hp:Boss.hp,hpMax:Boss.hpMax,dmgMul:+(Boss.dmgMul||1).toFixed(2),x:+Boss.grp.position.x.toFixed(2),z:+Boss.grp.position.z.toFixed(2),yaw:+Boss.yaw.toFixed(2),bite:Boss.biteSeq});
 }
 // gửi trọn trạng thái boss cho MỘT người (khi họ vừa vào phòng) — đồng bộ tức thì
 function sendBossSnapshotTo(pid){
   if(!bossAuthority())return;
   if(Boss.active){
-    netSendTo(pid,{t:'bossSpawn',hp:Boss.hp,hpMax:Boss.hpMax,x:+Boss.grp.position.x.toFixed(2),z:+Boss.grp.position.z.toFixed(2),yaw:+Boss.yaw.toFixed(2)});
+    netSendTo(pid,{t:'bossSpawn',hp:Boss.hp,hpMax:Boss.hpMax,dmgMul:+(Boss.dmgMul||1).toFixed(2),x:+Boss.grp.position.x.toFixed(2),z:+Boss.grp.position.z.toFixed(2),yaw:+Boss.yaw.toFixed(2)});
   }else{
     netSendTo(pid,{t:'bossTimer',timer:Math.max(0,Boss.timer)});
   }
@@ -2609,7 +2612,12 @@ function triggerBite(){Boss.anim=1;Boss.animT=0;Boss.bitDone=!1;Boss.biteSeq++;}
 function updateBoss(dt,time){
   // AUTHORITY: đếm giờ xuất hiện theo ĐỒNG HỒ THẬT (không lệ thuộc dt của rAF)
   if(bossAuthority()&&!Boss.active){
-    if(!Boss.spawnAt)loadBossSchedule();                 // khôi phục/khởi tạo (bền qua F5)
+    if(!Boss.spawnAt){
+      // vừa TRỞ THÀNH trọng tài (chủ cũ rời) & boss chưa hiện: nếu đang có đồng hồ
+      // đồng bộ từ chủ cũ thì tiếp nối nó; nếu không, khôi phục/khởi tạo lịch.
+      if(netConnected()&&Boss.timer!=null&&Boss.timer>0&&Boss.timer<=BOSS_FIRST+1){Boss.spawnAt=Date.now()+Boss.timer*1000;Boss.warned=Boss.timer<=10;saveBossSchedule()}
+      else loadBossSchedule();
+    }
     Boss.timer=Math.max(0,(Boss.spawnAt-Date.now())/1000);
     if(!Boss.warned&&Boss.timer<=10){Boss.warned=!0;showFloat('⚠️ Khủng long sắp xuất hiện...','#ff9a44');feed('⚠️ Chuẩn bị! Khủng long sắp tới trong 10 giây.')}
     if(Boss.timer<=0)bossSpawn();
@@ -3006,7 +3014,7 @@ function applyMsg(d,fromId){
     }
     case 'bossSpawn':{                       // host báo boss xuất hiện
       if(bossAuthority())break;
-      Boss.hpMax=d.hpMax;Boss.hp=d.hp;Boss.active=!0;Boss.grp.visible=!0;
+      Boss.hpMax=d.hpMax;Boss.hp=d.hp;if(typeof d.dmgMul==='number')Boss.dmgMul=d.dmgMul;Boss.active=!0;Boss.grp.visible=!0;
       Boss.tx=d.x;Boss.tz=d.z;Boss.tyaw=d.yaw;Boss.grp.position.set(d.x,0,d.z);Boss.grp.rotation.y=d.yaw;Boss.yaw=d.yaw;
       audio.roar();showFloat('🦖 KHỦNG LONG BẠO CHÚA XUẤT HIỆN!','#ff6a4a');
       feed('🦖 <b>Khủng long bạo chúa</b> đã xuất hiện — cùng nhau hạ nó!');
@@ -3018,11 +3026,12 @@ function applyMsg(d,fromId){
     }
     case 'boss':{                            // host đồng bộ trạng thái boss
       if(bossAuthority())break;
-      Boss.hp=d.hp;if(typeof d.hpMax==='number')Boss.hpMax=d.hpMax;Boss.tx=d.x;Boss.tz=d.z;Boss.tyaw=d.yaw;if(typeof d.bite==='number')Boss.biteSeq=d.bite;
+      Boss.hp=d.hp;if(typeof d.hpMax==='number')Boss.hpMax=d.hpMax;if(typeof d.dmgMul==='number')Boss.dmgMul=d.dmgMul;
+      Boss.tx=d.x;Boss.tz=d.z;Boss.tyaw=d.yaw;if(typeof d.bite==='number')Boss.biteSeq=d.bite;
       if(!Boss.active){Boss.active=!0;Boss.grp.visible=!0;Boss.grp.position.set(d.x,0,d.z);Boss.grp.rotation.y=d.yaw;Boss.yaw=d.yaw}
       updateBossBar();updateBossTimer();break;
     }
-    case 'bossHit':{                         // guest đánh trúng → host trừ máu
+    case 'bossHit':{                         // ai đó đánh trúng → CHỈ trọng tài trừ máu
       if(!bossAuthority()||!Boss.active)break;
       Boss.hp=Math.max(0,Boss.hp-(d.dmg||0));
       if(Boss.hp<=0)bossDefeated();else broadcastBoss();

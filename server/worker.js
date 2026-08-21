@@ -61,16 +61,25 @@ export class Room {
   roster() {
     return this.liveSockets().map(ws => {
       const c = this.meta(ws);
-      return { id: c.id, name: c.name, lvl: c.lvl || 1, kills: c.kills || 0, deaths: c.deaths || 0, dead: !!c.dead, waiting: !!c.waiting };
+      return { id: c.id, name: c.name, lvl: c.lvl || 1, kills: c.kills || 0, deaths: c.deaths || 0, dead: !!c.dead, waiting: !!c.waiting, weapon: c.weapon || 'axe', cos: c.cos || null };
     });
   }
   send(ws, obj) { try { ws.send(JSON.stringify(obj)); } catch (e) {} }
   sendToId(id, obj) { for (const ws of this.liveSockets()) if (this.meta(ws).id === id) { this.send(ws, obj); return; } }
   broadcast(obj, exceptId) { const s = JSON.stringify(obj); for (const ws of this.liveSockets()) { if (exceptId && this.meta(ws).id === exceptId) continue; try { ws.send(s); } catch (e) {} } }
-  // TRỌNG TÀI phòng = socket còn sống LÂU NHẤT (vào sớm nhất). Ổn định qua F5 của
-  // người khác: chỉ khi chính trọng tài rời đi mới chuyển cho người kế tiếp. Đây
-  // là bên chạy AI boss + đồng hồ, nên phòng luôn có đúng MỘT trọng tài.
-  authId() { const s = this.liveSockets(); return s.length ? (this.meta(s[0]).id || null) : null; }
+  // TRỌNG TÀI phòng = người VÀO SỚM NHẤT còn sống (joinAt nhỏ nhất, hoà thì theo
+  // id). Tính từ joinAt lưu trong attachment — KHÔNG dựa vào thứ tự getWebSockets()
+  // (Cloudflare không đảm bảo thứ tự này, nếu dựa vào sẽ khiến trọng tài nhảy loạn
+  // → boss đứng yên, đánh không trừ máu). Chỉ đổi khi chính trọng tài rời phòng.
+  authId() {
+    let best = null, bestJ = Infinity, bestId = '';
+    for (const ws of this.liveSockets()) {
+      const c = this.meta(ws); if (!c.id) continue;
+      const j = c.joinAt || 0;
+      if (j < bestJ || (j === bestJ && (best === null || c.id < bestId))) { bestJ = j; bestId = c.id; best = c.id; }
+    }
+    return best;
+  }
   sendRoster() { this.broadcast({ t: 'roster', players: this.roster(), max: MAX, authId: this.authId() }); }
 
   async fetch(request) {
@@ -100,7 +109,11 @@ export class Room {
     const id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const name = String(url.searchParams.get('name') || 'Người chơi').slice(0, 14);
     const waiting = room && this.activeCount() >= MAX;
-    this.setMeta(server, { id, name, room, waiting, lvl: 1, kills: 0, deaths: 0, dead: false, hp: 100, hpMax: 100 });
+    // joinAt = mốc vào phòng (để bầu trọng tài ổn định). Cần MONOTONIC trong phòng
+    // nên lấy max(now, maxJoinAtHiệnTại+1) — tránh 2 người trùng mốc.
+    let maxJ = 0; for (const w of this.liveSockets()) { const jm = this.meta(w).joinAt || 0; if (jm > maxJ) maxJ = jm; }
+    const joinAt = Math.max(Date.now(), maxJ + 1);
+    this.setMeta(server, { id, name, room, waiting, joinAt, lvl: 1, kills: 0, deaths: 0, dead: false, hp: 100, hpMax: 100, weapon: 'axe', cos: null });
 
     this.send(server, { t: 'welcome', id, room, waiting, max: MAX, authId: this.authId(), slot: waiting ? 'Phòng đang đầy — bạn vào hàng chờ' : '' });
     this.sendRoster();
@@ -118,13 +131,16 @@ export class Room {
         c.name = String(d.name || c.name).slice(0, 14);
         c.lvl = d.lvl || 1; c.hp = d.hp || c.hp; c.hpMax = d.hpMax || c.hpMax;
         c.kills = d.kills || 0; c.deaths = d.deaths || 0; c.dead = !!d.dead;
+        if (d.weapon) c.weapon = d.weapon; if (d.cos !== undefined) c.cos = d.cos || null;
         this.setMeta(ws, c);
+        this.broadcast(d, c.id);            // cho người đang trong phòng biết ngay (kèm cos/weapon)
         this.sendRoster();
         break;
       case 'stats':
         c.hp = d.hp; c.hpMax = d.hpMax || c.hpMax; c.lvl = d.lvl || c.lvl;
         c.dead = !!d.dead; c.kills = d.kills != null ? d.kills : c.kills; c.deaths = d.deaths != null ? d.deaths : c.deaths;
         if (d.name) c.name = String(d.name).slice(0, 14);
+        if (d.weapon) c.weapon = d.weapon; if (d.cos !== undefined) c.cos = d.cos || null;
         this.setMeta(ws, c);
         this.broadcast(d, c.id);
         this.sendRoster();
