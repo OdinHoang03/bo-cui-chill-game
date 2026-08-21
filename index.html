@@ -2247,8 +2247,8 @@ function dealAreaDamageBoss(dmg,pred,tag){
 // QUYỀN LỰC: chạy AI + máu boss rồi đồng bộ qua net ('boss'); người khác gửi
 // 'bossHit' về host khi đánh trúng. Đòn boss đánh trúng người chơi dùng lại
 // kênh 'hit' sẵn có. Hạ boss → cả phòng nhận thưởng lớn.
-const BOSS_FIRST=180;        // lần đầu xuất hiện sau 3 phút
-const BOSS_RESPAWN=150;      // tái xuất sau khi bị hạ
+const BOSS_FIRST=60;         // lần đầu xuất hiện sau 1 phút
+const BOSS_RESPAWN=60;       // tái xuất sau khi bị hạ (1 phút)
 const BOSS_BITE_RANGE=3.6;   // tầm cắn
 const BOSS_SPEED=2.6;        // tốc độ đuổi
 const Boss={active:!1,grp:null,head:null,jaw:null,legL:null,legR:null,armL:null,armR:null,tail:[],eyeMats:[],
@@ -2444,6 +2444,9 @@ function updateBoss(dt,time){
     if(Boss.timer<=0)bossSpawn();
     // đồng bộ đồng hồ cho cả phòng ~mỗi giây
     if(netConnected()){bossTimerNetTick+=dt;if(bossTimerNetTick>1){bossTimerNetTick=0;broadcast({t:'bossTimer',timer:Math.max(0,Boss.timer)})}}
+  }else if(!Boss.active){
+    // GUEST: tự đếm ngược cục bộ giữa các lần host đồng bộ (tránh đứng hình)
+    if(Boss.timer!=null&&Boss.timer>0)Boss.timer=Math.max(0,Boss.timer-dt);
   }
   if(!Boss.active){updateBossBar();updateBossTimer();return}
   const g=Boss.grp;
