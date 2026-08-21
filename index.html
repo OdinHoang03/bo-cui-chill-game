@@ -2324,7 +2324,7 @@ document.getElementById('ui').appendChild(bossBarWrap);
 // ---- đồng hồ đếm ngược tới lúc boss xuất hiện ----
 const bossTimerEl=document.createElement('div');
 bossTimerEl.id='boss-timer';
-bossTimerEl.style.cssText='position:absolute;left:50%;top:128px;transform:translateX(-50%);z-index:39;display:none;pointer-events:none;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);border:1px solid rgba(255,120,80,.45);border-radius:12px;padding:6px 16px;color:#ffdfce;font-weight:800;font-size:14px;text-shadow:0 1px 3px #000;white-space:nowrap;box-shadow:0 3px 14px rgba(0,0,0,.4)';
+bossTimerEl.style.cssText='position:absolute;left:50%;top:164px;transform:translateX(-50%);z-index:39;display:none;pointer-events:none;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);border:1px solid rgba(255,120,80,.45);border-radius:12px;padding:6px 16px;color:#ffdfce;font-weight:800;font-size:14px;text-shadow:0 1px 3px #000;white-space:nowrap;box-shadow:0 3px 14px rgba(0,0,0,.4)';
 document.getElementById('ui').appendChild(bossTimerEl);
 function fmtTime(s){s=Math.max(0,Math.ceil(s));const m=Math.floor(s/60),ss=s%60;return m+':'+(ss<10?'0':'')+ss}
 function updateBossTimer(){
