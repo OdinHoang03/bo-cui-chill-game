@@ -448,9 +448,16 @@ function splitLog(){
 }
 
 // ============== WOOD CHIP PARTICLES ==============
+// round soft sprite so chips aren't hard squares near the fiery trail
+function makeChipTex(){
+  const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
+  const g=x.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(230,180,100,1)');g.addColorStop(0.6,'rgba(200,150,80,0.9)');g.addColorStop(1,'rgba(180,130,70,0)');
+  x.fillStyle=g;x.fillRect(0,0,64,64);return new T.CanvasTexture(c);
+}
 const chipMax=60,chipGeo=new T.BufferGeometry(),chipPos=new Float32Array(chipMax*3),chipVel=[],chipLife=new Float32Array(chipMax);
 chipGeo.setAttribute('position',new T.BufferAttribute(chipPos,3));
-const chips=new T.Points(chipGeo,new T.PointsMaterial({color:0xD9AE64,size:.05,transparent:!0,opacity:.9,sizeAttenuation:!0}));
+const chips=new T.Points(chipGeo,new T.PointsMaterial({map:makeChipTex(),color:0xD9AE64,size:.09,transparent:!0,opacity:.95,sizeAttenuation:!0,depthWrite:!1}));
 chips.visible=!1;sc.add(chips);
 let chipActive=0;
 function emitChips(n,power){
@@ -595,8 +602,20 @@ const ribbon=new T.Mesh(ribGeo,ribMat);ribbon.frustumCulled=!1;sc.add(ribbon);
 const hot=[new T.Color(0xffffff),new T.Color(0xffd36b),new T.Color(0xff8a2b),new T.Color(0xff3b1e),new T.Color(0x7a0f05)];
 function hotColor(t){const s=t*(hot.length-1);const i=Math.min(hot.length-2,Math.floor(s));return hot[i].clone().lerp(hot[i+1],s-i)}
 let trailOpacity=0, swingPower=1;
-// glow sprite that rides the blade during a swing
-const glowMat=new T.SpriteMaterial({color:0xffa030,transparent:!0,opacity:0,blending:T.AdditiveBlending,depthWrite:!1});
+// glow sprite that rides the blade during a swing — use a RADIAL texture so it
+// renders as a soft round flare (a plain colored sprite shows as a hard square).
+function makeGlowTexture(){
+  const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');
+  const g=x.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0,'rgba(255,240,200,1)');
+  g.addColorStop(0.3,'rgba(255,170,60,0.75)');
+  g.addColorStop(0.65,'rgba(255,90,30,0.28)');
+  g.addColorStop(1,'rgba(255,60,20,0)');
+  x.fillStyle=g;x.fillRect(0,0,128,128);
+  return new T.CanvasTexture(c);
+}
+const glowTex=makeGlowTexture();
+const glowMat=new T.SpriteMaterial({map:glowTex,color:0xffffff,transparent:!0,opacity:0,blending:T.AdditiveBlending,depthWrite:!1,depthTest:!1});
 const glow=new T.Sprite(glowMat);glow.scale.set(1.1,1.1,1);sc.add(glow);
 
 // ============== CHOP ANIMATION — MANY DIRECTIONS ==============
