@@ -180,7 +180,7 @@ canvas{display:block}
   <div id="mp-idle">
     <div class="sub">Chọn chế độ để tạo phòng:</div>
     <button class="btn" id="mp-host-1v1">⚔️ Tạo phòng 1v1 (2 người)</button>
-    <button class="btn" id="mp-host-room">👥 Tạo phòng đông (tối đa 8)</button>
+    <button class="btn" id="mp-host-room">👥 Tạo phòng đông (tối đa 16)</button>
     <button class="btn alt" id="mp-join-show">🔑 Nhập mã để vào phòng</button>
   </div>
   <div id="mp-hosting" style="display:none">
@@ -454,15 +454,16 @@ const blockTop=new T.Mesh(new T.CylinderGeometry(.68,.7,.04,12),new T.MeshStanda
 blockTop.position.set(0,.51,0);sc.add(blockTop);
 
 // ============== LOG (the wood to chop) ==============
-function makeLog(){
+function makeLog(rng){
+  rng=rng||Math.random;                    // seeded rng when online, else random
   // upright log built from TWO half-cylinders on hinge pivots so it can
   // progressively split open with each chop, then fully separate at the end.
   const grp=new T.Group();
-  const h=0.72+Math.random()*0.55;         // varying height
-  const r=0.30+Math.random()*0.08;         // varying radius
+  const h=0.72+rng()*0.55;                  // varying height
+  const r=0.30+rng()*0.08;                  // varying radius
   grp.userData.h=h; grp.userData.r=r;
   // per-log bark tint for variety
-  const tint=new T.Color().setHSL(0.08+Math.random()*0.04,0.45,0.42+Math.random()*0.08);
+  const tint=new T.Color().setHSL(0.08+rng()*0.04,0.45,0.42+rng()*0.08);
 
   const mkHalf=(side)=>{
     const pivot=new T.Group();             // pivot at the base (y=0)
@@ -485,13 +486,13 @@ function makeLog(){
     // raised bark ridges FLUSH on the curved side, kept away from the seam edges
     for(let i=0;i<6;i++){
       const a=(side>0?0.35:Math.PI+0.35)+(i/6)*(Math.PI-0.7);
-      const st=new T.Mesh(new T.BoxGeometry(.022,h*(0.7+Math.random()*0.12),.03+Math.random()*.02),barkMat);
-      st.position.set(Math.cos(a)*r,h/2+(Math.random()-.5)*.04,Math.sin(a)*r);st.rotation.y=-a;pivot.add(st);
+      const st=new T.Mesh(new T.BoxGeometry(.022,h*(0.7+rng()*0.12),.03+rng()*.02),barkMat);
+      st.position.set(Math.cos(a)*r,h/2+(rng()-.5)*.04,Math.sin(a)*r);st.rotation.y=-a;pivot.add(st);
     }
     // a couple of knots (kept off the seam)
-    if(Math.random()<0.6){
-      const knot=new T.Mesh(new T.SphereGeometry(.035+Math.random()*.025,8,6),new T.MeshStandardMaterial({color:0x4a3316,roughness:1}));
-      const a=(side>0?0.4:Math.PI+0.4)+Math.random()*(Math.PI-0.8);knot.position.set(Math.cos(a)*r*0.97,h*(0.25+Math.random()*0.5),Math.sin(a)*r*0.97);knot.scale.z=0.4;knot.rotation.y=-a;pivot.add(knot);
+    if(rng()<0.6){
+      const knot=new T.Mesh(new T.SphereGeometry(.035+rng()*.025,8,6),new T.MeshStandardMaterial({color:0x4a3316,roughness:1}));
+      const a=(side>0?0.4:Math.PI+0.4)+rng()*(Math.PI-0.8);knot.position.set(Math.cos(a)*r*0.97,h*(0.25+rng()*0.5),Math.sin(a)*r*0.97);knot.scale.z=0.4;knot.rotation.y=-a;pivot.add(knot);
     }
     return pivot;
   };
@@ -508,16 +509,22 @@ function makeLog(){
 
 let logGrp=null;      // current live log group
 let logDrop=null;     // drop-in animation state
+let logSeed=0;        // seed for the current log (shared over the network)
 const LOG_BASE_Y=0.53; // top of the chopping block
+// tiny deterministic RNG (mulberry32) so a shared seed → identical log everywhere
+function makeRng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
-function spawnLog(fromSky=!0){
-  logGrp=makeLog();
-  // each log needs a DIFFERENT number of chops
-  St.logMaxHP=3+Math.floor(Math.random()*5);   // 3..7
-  St.logHP=St.logMaxHP;
+function spawnLog(fromSky=!0,opts){
+  opts=opts||{};
+  // online: everyone builds the SAME log from a shared seed & HP
+  logSeed=(opts.seed!=null)?opts.seed:(Math.random()*1e9|0);
+  const rng=makeRng(logSeed);
+  logGrp=makeLog(rng);
+  if(opts.mhp){St.logMaxHP=opts.mhp;St.logHP=(opts.hp!=null?opts.hp:opts.mhp)}
+  else{St.logMaxHP=3+Math.floor(rng()*5);St.logHP=St.logMaxHP}   // 3..7
   if(fromSky){
     logGrp.position.set(0,LOG_BASE_Y+7,0);
-    logGrp.rotation.z=(Math.random()-.5)*.5;
+    logGrp.rotation.z=(rng()-.5)*.5;
     logDrop={t:0,restY:LOG_BASE_Y,startY:LOG_BASE_Y+7,rotZ:logGrp.rotation.z};
   }else{
     logGrp.position.set(0,LOG_BASE_Y,0);
@@ -683,7 +690,40 @@ function splitLog(){
     flyingPieces.push({mesh:sp,vel:{x:Math.cos(a)*sp2,y:2+Math.random()*2.5,z:Math.sin(a)*sp2},angVel:{x:(Math.random()-.5)*14,y:(Math.random()-.5)*14,z:(Math.random()-.5)*14},life:1.6+Math.random()*0.8,grounded:!1,restY:.03});
   }
   logGrp=null;
-  setTimeout(()=>spawnLog(!0),750);
+  // respawn the next log — online uses a shared seed so everyone gets the same one
+  const seed=(pendingNextSeed!=null)?pendingNextSeed:null;pendingNextSeed=null;
+  setTimeout(()=>spawnLog(!0,seed!=null?{seed}:undefined),750);
+}
+let pendingNextSeed=null;
+// ---- receive shared central-log updates from the network ----
+function onLogSync(d){
+  if(d.k==='ask'){
+    // a late joiner wants the current log — reply with our full state
+    if(logGrp&&d.id&&d.id!==Me.id)netSendTo(d.id,{t:'log',k:'state',seed:logSeed,hp:St.logHP,mhp:St.logMaxHP});
+    return;
+  }
+  if(d.k==='hp'){
+    // adopt someone else's damage to the SAME log. If our seed differs (we joined
+    // mid-log), rebuild the log from their seed so visuals match.
+    if(d.seed!=null&&d.seed!==logSeed){ if(logGrp){sc.remove(logGrp);logGrp=null;} spawnLog(!1,{seed:d.seed,mhp:d.mhp,hp:d.hp}); }
+    else { St.logHP=Math.min(St.logHP,d.hp); if(logGrp)applyChopVisualToFrac(); }
+    updateUI();
+  }else if(d.k==='split'){
+    // someone broke the log → play the split locally (no double wood for us) and
+    // spawn the same next log everyone will share
+    if(logGrp){ St.logHP=0; pendingNextSeed=(d.next!=null?d.next:null); audio.split(); emitChips(30,2.0); splitLog(); }
+    else { pendingNextSeed=(d.next!=null?d.next:null); }
+  }else if(d.k==='state'){                // full state for a late joiner
+    if(d.seed===logSeed){ St.logHP=Math.min(St.logHP,d.hp); if(logGrp)applyChopVisualToFrac(); }
+    else { if(logGrp){sc.remove(logGrp);logGrp=null;} spawnLog(!1,{seed:d.seed,mhp:d.mhp,hp:d.hp}); }
+    updateUI();
+  }
+}
+// re-apply crack visuals to match current HP fraction (used on remote HP sync)
+function applyChopVisualToFrac(){
+  if(!logGrp)return;
+  const {h}=logGrp.userData;
+  logGrp.userData.split=1-St.logHP/St.logMaxHP;
 }
 
 // ============== WOOD CHIP PARTICLES ==============
@@ -976,8 +1016,8 @@ function makeLabelTex(txt){
 // ---- multi-player avatar pool (keyed by peer id) ----
 // Up to MAX_PLAYERS-1 remote avatars can be visible at once. Each remote player
 // gets one avatar handle + a state object we interpolate toward.
-const MAX_PLAYERS=8;                 // total players in a room (including me)
-const REMOTE_COLORS=[0xC65B5B,0x5B7FC6,0x6FB05B,0xC6A85B,0xA05BC6,0x5BC6BB,0xC66F9E];
+const MAX_PLAYERS=16;                // total players in a room (including me)
+const REMOTE_COLORS=[0xC65B5B,0x5B7FC6,0x6FB05B,0xC6A85B,0xA05BC6,0x5BC6BB,0xC66F9E,0xE08A3C,0x8ACb5B,0x5B8AC6,0xC65BA0,0x9E9E4B,0x4BC6C6,0xC64B4B,0x7A5BC6];
 const peers={};                      // peerId -> {av, st}
 function makePeerEntry(id,idx){
   const av=makeRemoteGuy();
@@ -1214,8 +1254,16 @@ function landHit(){
     emitChips(42,2.3);
     splitLog();
     saveProgress();
+    // online: I broke the log → tell everyone to split & respawn the SAME next log
+    if(netConnected()){
+      const nextSeed=Math.random()*1e9|0;
+      broadcast({t:'log',k:'split',seed:logSeed,next:nextSeed});
+      pendingNextSeed=nextSeed;
+    }
   }else{
     St.score+=dmg;
+    // online: broadcast the log's new HP so others see it shrink (throttled)
+    if(netConnected())broadcast({t:'log',k:'hp',seed:logSeed,hp:St.logHP,mhp:St.logMaxHP});
   }
   updateUI();
 }
@@ -1857,6 +1905,10 @@ function applyMsg(d,fromId){
       removePeer(d.id||fromId);renderLeaderboard();
       break;
     }
+    case 'log':{                          // shared central log sync
+      onLogSync(d);
+      break;
+    }
   }
 }
 // ---------- wire a DataConnection ----------
@@ -1874,6 +1926,8 @@ function wireConn(c,isHostSide){
       rawSend(c,helloPayload());
       // tell the new guest about all existing players
       for(const id in peers)if(id!==c.peer)rawSend(c,{t:'hello',id,name:peers[id].st.name,hp:peers[id].st.hp,hpMax:peers[id].st.hpMax,lvl:peers[id].st.lvl,dead:peers[id].st.dead,kills:peers[id].st.kills,deaths:peers[id].st.deaths,waiting:peers[id].st.waiting});
+      // share the current central log so the guest sees the same one
+      if(logGrp)rawSend(c,{t:'log',k:'state',seed:logSeed,hp:St.logHP,mhp:St.logMaxHP});
       sendRoster();
     }else{
       // I'm the guest; connection to host is open
@@ -2033,6 +2087,8 @@ function wsConnect(code,asRoom,isHost){
       if(netRole==='host'){mpMsg('✅ Phòng đã mở trên server. Chia sẻ mã/link rồi giữ tab này.')}
       else{setNet(roomMode?'🟢 Đã vào phòng':'🟢 Đã kết nối — PvP bật!',!0);feed('🟢 Đã vào phòng!')}
       wsSend(helloPayload());renderLeaderboard();
+      // ask the room for the current shared log so we see the same one
+      if(netRole==='guest')broadcast({t:'log',k:'ask',id:Me.id});
       return;
     }
     applyMsg(d,d.id);
@@ -2052,7 +2108,7 @@ function startHosting(asRoom){
   document.getElementById('mp-hosting').style.display='block';
   document.getElementById('mp-code').textContent=code;
   document.getElementById('mp-link').textContent=inviteUrl(code);
-  document.getElementById('mp-mode-tag').textContent=(roomMode?'👥 Phòng đông (tối đa 8 người)':'⚔️ Phòng 1v1')+(USE_WS?' · 🌐 Server':' · P2P');
+  document.getElementById('mp-mode-tag').textContent=(roomMode?'👥 Phòng đông (tối đa 16 người)':'⚔️ Phòng 1v1')+(USE_WS?' · 🌐 Server':' · P2P');
   mpMsg('Đang mở phòng…');netRole='host';
   if(USE_WS){ Me.id=null; wsConnect(code,asRoom,!0);
     // host cũng chỉ là một client trên server; mở xong thì chờ người vào
@@ -2142,16 +2198,29 @@ document.getElementById('mp-join-go').addEventListener('click',()=>{
 });
 addEventListener('beforeunload',()=>{try{if(netMode==='ws'){if(ws)ws.close()}else broadcast({t:'bye',id:Me.id})}catch(e){}});
 
-// stream our position ~15×/s to everyone
-let netTick=0;
+// stream our position to everyone — OPTIMIZED for busy rooms:
+//  • send at most ~11×/s, and only when we actually moved/turned/changed pose;
+//  • also send the central log's HP so everyone sees the same log while online.
+let netTick=0, lastSent={x:1e9,z:0,yaw:0,armX:0,ch:!1}, logSyncTick=0;
 function netUpdate(dt){
   if(!netConnected()||Me.waiting)return;
   netTick+=dt;
-  if(netTick<0.066)return;netTick=0;
-  broadcast({t:'pos',id:Me.id,x:+guy.position.x.toFixed(2),z:+guy.position.z.toFixed(2),yaw:+GUY_YAW.toFixed(2),armX:+rArm.rotation.x.toFixed(2),ch:St.isChopping});
+  if(netTick<0.09)return;netTick=0;
+  const x=+guy.position.x.toFixed(2), z=+guy.position.z.toFixed(2),
+        yaw=+GUY_YAW.toFixed(2), armX=+rArm.rotation.x.toFixed(2), ch=St.isChopping;
+  // skip the packet entirely if nothing meaningful changed (huge saving when idle)
+  const moved=Math.abs(x-lastSent.x)>0.02||Math.abs(z-lastSent.z)>0.02
+    ||Math.abs(yaw-lastSent.yaw)>0.03||Math.abs(armX-lastSent.armX)>0.05||ch!==lastSent.ch;
+  if(moved){ broadcast({t:'pos',id:Me.id,x,z,yaw,armX,ch}); lastSent={x,z,yaw,armX,ch}; }
 }
-// interpolate & draw every remote avatar
+// shared central log: whoever finishes a log tells everyone the new one's seed & HP
+function sendLogState(kind){
+  if(!netConnected())return;
+  broadcast({t:'log',k:kind,hp:St.logHP,mhp:St.logMaxHP,seed:logSeed});
+}
+// interpolate & draw every remote avatar (with distance culling for big rooms)
 function updateRemote(dt){
+  const cx=guy.position.x, cz=guy.position.z;
   for(const p of Object.values(peers)){
     const g=p.av.grp, st=p.st;
     if(st.waiting){g.visible=!1;continue}
@@ -2165,6 +2234,10 @@ function updateRemote(dt){
     p.av.hpFg.material.color.setHex(hpp<0.35?0xff3333:0xff7744);
     const targetY=st.dead?-0.7:0;
     g.position.y+=(targetY-g.position.y)*Math.min(1,dt*4);
+    // hide name/HP sprites for far-away players so a crowded room stays light
+    const far=Math.hypot(g.position.x-cx,g.position.z-cz)>26;
+    if(p.av.nameSpr)p.av.nameSpr.visible=!far;
+    if(p.av.hpFg)p.av.hpFg.visible=!far;
     g.visible=!0;
   }
 }

@@ -19,7 +19,7 @@ const CORS = {
   'access-control-allow-methods': 'GET,OPTIONS',
   'access-control-allow-headers': '*',
 };
-const MAX = 8;          // số người đánh cùng lúc tối đa (chế độ phòng đông)
+const MAX = 16;         // số người đánh cùng lúc tối đa (chế độ phòng đông)
 
 export default {
   async fetch(request, env) {
