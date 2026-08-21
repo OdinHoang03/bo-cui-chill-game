@@ -338,13 +338,13 @@ const WEAPONS=[
     trail:0xff5a1e, chipColor:0xffb060, styles:[0,1,3,4,7], viewScale:1.0,
     desc:'Cân bằng, tụ lực mạnh.', skill:{id:'whirlwind', name:'Xoay Cuồng Phong', icon:'🌀', cd:12, dur:2.6, help:'Xoay tít gây sát thương diện rộng liên tục quanh bạn.'}},
   {id:'hammer',icon:'🔨', name:'Búa Chấn Địa',   tint:0x8899ff, model:'druidic_hammer.glb', dmgMul:1.6, reachMul:0.9, speedMul:0.82,chargeMul:1.35,
-    trail:0x88aaff, chipColor:0xbcd0ff, styles:[1,7], viewScale:1.12,
+    trail:0x88aaff, chipColor:0xbcd0ff, styles:[1,7], viewScale:1.12, flip:!0,
     desc:'Sát thương cực cao nhưng chậm.', skill:{id:'quake', name:'Chấn Địa', icon:'💥', cd:14, dur:0, help:'Nện đất gây sát thương lớn + hất văng mọi đối thủ xung quanh.'}},
   {id:'sword', icon:'⚔️', name:'Kiếm Gió',       tint:0x66ffcc, model:'saber_sword.glb', dmgMul:0.85,reachMul:1.15,speedMul:1.25,chargeMul:0.7,
-    trail:0x66ffcc, chipColor:0xbafff0, styles:[3,4,5], viewScale:1.05,
+    trail:0x66ffcc, chipColor:0xbafff0, styles:[3,4,5], viewScale:1.05, flip:!0,
     desc:'Nhanh nhẹn, tầm với xa.', skill:{id:'dash', name:'Lao Vút', icon:'💨', cd:9, dur:0, help:'Lao thẳng về phía trước, chém trúng mọi kẻ trên đường.'}},
   {id:'dual',  icon:'🗡️', name:'Song Đao',       tint:0xff66aa, model:'sword_and_dagger.glb', dmgMul:0.7, reachMul:0.95,speedMul:1.4, chargeMul:0.6,
-    trail:0xff66aa, chipColor:0xffc0e0, styles:[2,3,4], viewScale:0.95,
+    trail:0xff66aa, chipColor:0xffc0e0, styles:[2,3,4], viewScale:0.95, flip:!0,
     desc:'Đánh cực nhanh, sát thương thấp.', skill:{id:'flurry', name:'Liên Trảm', icon:'🌪️', cd:10, dur:1.6, help:'Chém liên hoàn cực nhanh vào kẻ địch gần nhất.'}},
   {id:'spear', icon:'🔱', name:'Thương Xuyên Kích',tint:0xffe066,model:'spear.glb',dmgMul:1.1, reachMul:1.5, speedMul:0.95,chargeMul:1.0,
     trail:0xffe066, chipColor:0xfff0a0, styles:[6,0], viewScale:1.15,
@@ -940,7 +940,8 @@ let AXE_EXTRA_YAW=0;          // set to Math.PI if the edge ends up facing backw
 // Build an auto-oriented, auto-scaled holder for ANY weapon glb, tinted by `emis`.
 // Reused for every weapon model so you can drop in Sketchfab .glb files and they
 // all seat correctly in the hand. Returns the holder group (already sized).
-function buildWeaponHolder(model,emis,viewScale){
+function buildWeaponHolder(model,w){
+  const emis=w?w.tint:0xff5a1e, viewScale=w?w.viewScale:1;
   const gAlign=new T.Group();gAlign.add(model);
   const gFlip=new T.Group();gFlip.add(gAlign);
   const gYaw=new T.Group();gYaw.add(gFlip);
@@ -981,12 +982,13 @@ function buildWeaponHolder(model,emis,viewScale){
     const pos=o.geometry.attributes.position;
     for(let i=0;i<pos.count;i+=7){
       va.fromBufferAttribute(pos,i);o.localToWorld(va);
-      const w=Math.abs(va.x)+Math.abs(va.z);
-      if(va.y>yMid){topW+=w;topN++;}else{botW+=w;botN++;}
+      const w2=Math.abs(va.x)+Math.abs(va.z);
+      if(va.y>yMid){topW+=w2;topN++;}else{botW+=w2;botN++;}
     }
   }});
   const topAvg=topN?topW/topN:0, botAvg=botN?botW/botN:0;
-  const headOnTop=topAvg>botAvg;
+  let headOnTop=topAvg>botAvg;
+  if(w&&w.flip)headOnTop=!headOnTop;               // đảo thủ công nếu model bị cầm ngược
   if(headOnTop)gFlip.rotation.z=Math.PI;           // heavy head must hang DOWN
 
   // 4) the blade is a flat plate; its THIN axis is the plate normal. The swing
@@ -994,7 +996,7 @@ function buildWeaponHolder(model,emis,viewScale){
   //    axis must be X. If it is currently Z, yaw the whole head by 90°.
   collect(!headOnTop);                              // sample the blade half
   const xSpread=bxMax-bxMin, zSpread=bzMax-bzMin;
-  gYaw.rotation.y=(zSpread<xSpread?Math.PI/2:0)+AXE_EXTRA_YAW;
+  gYaw.rotation.y=(zSpread<xSpread?Math.PI/2:0)+AXE_EXTRA_YAW+((w&&w.yaw)||0);
 
   // 5) scale to target length, then seat so the grip is at y=0 and head at -Y
   box=bbox();box.getSize(size);
@@ -1032,7 +1034,7 @@ function loadWeaponModel(w){
   showFallbackAxe(w.tint);               // show fallback while loading
   _gltfLoader.load(w.model,gltf=>{
     weaponLoading[w.id]=!1;
-    const holder=buildWeaponHolder(gltf.scene,w.tint,w.viewScale);
+    const holder=buildWeaponHolder(gltf.scene,w);
     holder.visible=!1;axe.add(holder);weaponHolders[w.id]=holder;
     if(curWeapon.id===w.id){             // still the active weapon → show it
       axeFallback.visible=!1;if(axeModelHolder&&axeModelHolder!==holder)axeModelHolder.visible=!1;
@@ -1064,7 +1066,7 @@ function requestWeaponProto(w,cb){
   (weaponProtoCbs[w.id]=weaponProtoCbs[w.id]||[]).push(cb);
   if(weaponProtoCbs[w.id].length>1)return;   // a load is already in flight
   _gltfLoader.load(w.model,gltf=>{
-    weaponProtos[w.id]=buildWeaponHolder(gltf.scene,w.tint,w.viewScale);
+    weaponProtos[w.id]=buildWeaponHolder(gltf.scene,w);
     (weaponProtoCbs[w.id]||[]).forEach(fn=>fn(weaponProtos[w.id]));weaponProtoCbs[w.id]=[];
   },undefined,err=>{
     console.warn('Không tải được model vũ khí (đối thủ) "'+w.model+'"',err);
@@ -1451,6 +1453,8 @@ function landHit(){
 }
 
 function updateChop(dt){
+  // trong lúc chơi animation kỹ năng thì nhường tư thế cho updateSkills
+  if(skillActive||skillAnim)return;
   // ---- CHARGING pose: arm cocks back further, axe grows & tilts blade DOWN ----
   if(charging){
     const p=Math.min(1,charge/chargeTime());
@@ -2190,43 +2194,94 @@ function useSkill(){
   audio.split();
   showFloat(s.icon+' '+s.name+'!','#ffe27a');
   document.body.style.animation='shake .3s ease-out';setTimeout(()=>document.body.style.animation='',300);
-  if(s.dur>0){skillActive={id:s.id,t:0,dur:s.dur};}
-  // hiệu ứng tức thời cho các skill không kéo dài
+  St.isChopping=!1;charging=!1;                         // ngắt bổ củi để chơi animation kỹ năng
+  if(s.dur>0){skillActive={id:s.id,t:0,dur:s.dur};}     // whirlwind/flurry: kéo dài
+  else{skillAnim={id:s.id,t:0,dur:0.55,fx:Math.sin(GUY_YAW),fz:Math.cos(GUY_YAW),done:!1};} // quake/dash/pierce: animation ngắn
+  renderLeaderboard();broadcastStats();updateSkillHUD();
+}
+// gây hiệu ứng + sát thương của kỹ năng "một nhát" đúng vào khoảnh khắc va chạm
+function fireInstantSkill(a){
+  const s=curWeapon.skill;const fx=a.fx,fz=a.fz;
   if(s.id==='quake'){
     emitChipsAt(guy.position.x,.4,guy.position.z,60,3.2);
+    quakeRingFx();
     dealAreaDamage(baseDamage()*2.2,(p,dx,dz,dist)=>dist<5,'💥',!0);
   }else if(s.id==='dash'){
-    const fx=Math.sin(GUY_YAW),fz=Math.cos(GUY_YAW);
-    guy.position.x+=fx*4;guy.position.z+=fz*4;                 // lao tới
-    clampToArena();
+    guy.position.x+=fx*4;guy.position.z+=fz*4;clampToArena();
     trailOpacity=1;emitChipsAt(guy.position.x,.6,guy.position.z,26,1.8);
     dealAreaDamage(baseDamage()*1.6,(p,dx,dz,dist)=>{
       const along=dx*fx+dz*fz;const perp=Math.abs(dx*fz-dz*fx);
-      return along>-1&&along<5&&perp<1.6;                      // dọc đường lao
+      return along>-1&&along<5&&perp<1.6;
     },'💨',!0);
   }else if(s.id==='pierce'){
-    const fx=Math.sin(GUY_YAW),fz=Math.cos(GUY_YAW);
     trailOpacity=1;emitChipsAt(guy.position.x+fx*2,.9,guy.position.z+fz*2,24,1.6);
     dealAreaDamage(baseDamage()*1.9,(p,dx,dz,dist)=>{
       const along=dx*fx+dz*fz;const perp=Math.abs(dx*fz-dz*fx);
-      return along>0&&along<7*curWeapon.reachMul&&perp<1.1;    // đường thẳng dài phía trước
+      return along>0&&along<7*curWeapon.reachMul&&perp<1.1;
     },'🔱',!1);
   }
-  renderLeaderboard();broadcastStats();updateSkillHUD();
+  renderLeaderboard();broadcastStats();
+}
+// vòng sóng xung kích lan ra mặt đất khi dùng Chấn Địa
+let _quakeRing=null;
+function quakeRingFx(){
+  if(!_quakeRing){
+    const g=new T.RingGeometry(0.2,0.55,40);g.rotateX(-Math.PI/2);
+    _quakeRing=new T.Mesh(g,new T.MeshBasicMaterial({color:0x9fbcff,transparent:!0,opacity:0,side:T.DoubleSide,depthWrite:!1,blending:T.AdditiveBlending}));
+    sc.add(_quakeRing);
+  }
+  _quakeRing.position.set(guy.position.x,0.05,guy.position.z);
+  _quakeRing.scale.setScalar(1);_quakeRing.material.opacity=0.9;_quakeRing.userData.t=0;_quakeRing.visible=!0;
 }
 function clampToArena(){
   const R=22;const d=Math.hypot(guy.position.x,guy.position.z);
   if(d>R){guy.position.x*=R/d;guy.position.z*=R/d}
 }
-// cập nhật skill đang chạy (whirlwind / flurry) + hồi chiêu
+// cập nhật skill đang chạy (whirlwind / flurry) + animation "một nhát" + hồi chiêu
 let skillTickAcc=0;
+let skillAnim=null;                       // {id,t,dur,fx,fz,done} cho quake/dash/pierce
 function updateSkills(dt){
   for(const k in skillCd){if(skillCd[k]>0){skillCd[k]=Math.max(0,skillCd[k]-dt)}}
+  // ---- vòng sóng Chấn Địa lan ra ----
+  if(_quakeRing&&_quakeRing.visible){
+    _quakeRing.userData.t+=dt;const q=_quakeRing.userData.t/0.5;
+    _quakeRing.scale.setScalar(1+q*10);
+    _quakeRing.material.opacity=Math.max(0,0.9*(1-q));
+    if(q>=1)_quakeRing.visible=!1;
+  }
+  // ---- animation kỹ năng "một nhát" (quake/dash/pierce): tư thế nhân vật + đòn đánh đúng khoảnh khắc ----
+  if(skillAnim){
+    const a=skillAnim;a.t+=dt;const p=Math.min(1,a.t/a.dur);
+    if(a.id==='quake'){
+      // giơ búa lên cao rồi giáng xuống; đánh khi chạm đất (p≈0.5)
+      if(p<0.5){const e=easeOut(p/0.5);rArm.rotation.x=ARM_IDLE+(-2.7-ARM_IDLE)*e;guy.position.y=e*0.4;guy.rotation.z=-0.2*e;}
+      else{const e=easeIn((p-0.5)/0.5);rArm.rotation.x=-2.7+(0.7-(-2.7))*e;guy.position.y=0.4*(1-e);guy.rotation.z=-0.2*(1-e);
+        lArm.rotation.x=LARM_IDLE+(-0.9-LARM_IDLE)*(1-e);}
+      lArm.rotation.z=-0.15;
+      if(!a.done&&p>=0.5){a.done=!0;fireInstantSkill(a);}
+    }else if(a.id==='dash'){
+      // lao người + kiếm đâm thẳng về trước; đánh ngay đầu chiêu
+      const e=easeOut(p);
+      guy.rotation.y=GUY_YAW;guy.rotation.z=0;
+      rArm.rotation.x=ARM_IDLE+(-1.35-ARM_IDLE)*Math.sin(p*Math.PI);   // đâm rồi rút
+      guy.position.y=Math.sin(p*Math.PI)*0.15;
+      if(!a.done){a.done=!0;fireInstantSkill(a);}
+    }else if(a.id==='pierce'){
+      // thương đâm dài: rùn người lấy đà rồi phóng tới
+      rArm.rotation.x=ARM_IDLE+(-1.25-ARM_IDLE)*Math.sin(p*Math.PI);
+      guy.rotation.z=0;
+      if(!a.done&&p>=0.35){a.done=!0;fireInstantSkill(a);}
+    }
+    trailOpacity=Math.max(trailOpacity,0.6);
+    if(p>=1){skillAnim=null;guy.position.y=0;guy.rotation.z=0;}
+  }
   if(skillActive){
     skillActive.t+=dt;skillTickAcc+=dt;
     // xoay người liên tục
     if(skillActive.id==='whirlwind'){
       guy.rotation.y+=dt*22;                                   // xoay tít
+      rArm.rotation.x=ARM_IDLE-0.9;rArm.rotation.z=0.5;        // dang rìu ngang ra để "quạt"
+      guy.position.y=0.12+Math.sin(skillActive.t*20)*0.05;
       trailOpacity=1;
       if(skillTickAcc>0.28){skillTickAcc=0;
         emitChipsAt(guy.position.x,.9,guy.position.z,10,1.4);
@@ -2235,6 +2290,8 @@ function updateSkills(dt){
     }else if(skillActive.id==='flurry'){
       // liên trảm: bổ liên tục vào kẻ gần nhất
       rArm.rotation.x=ARM_IDLE+Math.sin(skillActive.t*40)*1.3;
+      rArm.rotation.z=Math.sin(skillActive.t*40+1)*0.3;
+      guy.rotation.y=GUY_YAW;
       trailOpacity=1;
       if(skillTickAcc>0.16){skillTickAcc=0;
         dealAreaDamage(baseDamage()*0.55,(p,dx,dz,dist)=>dist<attackReach(),'🌪️',!1);
@@ -2242,7 +2299,7 @@ function updateSkills(dt){
       }
     }
     if(skillActive.t>=skillActive.dur){
-      skillActive=null;guy.rotation.z=0;
+      skillActive=null;guy.rotation.z=0;guy.position.y=0;
     }
   }
   updateSkillHUD();
