@@ -59,6 +59,13 @@ canvas{display:block}
 #skill-btn.ready{border-color:#7fe0a0;box-shadow:0 0 14px rgba(127,224,160,.6);animation:skillPulse 1.4s infinite}
 #skill-btn.active{border-color:#ffcf40;box-shadow:0 0 18px rgba(255,207,64,.8)}
 #skill-btn:hover{transform:scale(1.08)}
+#skill2-btn{position:absolute;right:104px;bottom:96px;width:60px;height:60px;border-radius:50%;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);border:2px solid rgba(150,220,255,.35);display:none;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;z-index:22;user-select:none;transition:transform .15s}
+#skill2-btn.on{display:flex}
+#skill2-btn .ic{font-size:23px;line-height:1}
+#skill2-btn .cd{font-size:11px;font-weight:800;color:#9fe3ff;margin-top:1px}
+#skill2-btn.ready{border-color:#7fd0ff;box-shadow:0 0 12px rgba(127,208,255,.6)}
+#skill2-btn.active{border-color:#9fe3ff;box-shadow:0 0 16px rgba(159,227,255,.85)}
+#skill2-btn:hover{transform:scale(1.08)}
 @keyframes skillPulse{0%,100%{box-shadow:0 0 10px rgba(127,224,160,.4)}50%{box-shadow:0 0 20px rgba(127,224,160,.8)}}
 /* ===== WEAPON PANEL ===== */
 #weapon-list{display:flex;flex-direction:column;gap:9px;margin:10px 0}
@@ -192,7 +199,8 @@ canvas{display:block}
   <div id="me-weapon" style="margin-top:3px;font-size:11px;opacity:.85">🪓 Rìu Nham Thạch</div>
   <div id="buff-bar"></div>
 </div>
-<div id="skill-btn" title="Kỹ năng vũ khí (E)"><span class="ic">🌀</span><span class="cd"></span></div>
+<div id="skill-btn" title="Kỹ năng tấn công (E)"><span class="ic">🌀</span><span class="cd"></span></div>
+<div id="skill2-btn" title="Kỹ năng phòng thủ/khống chế (R)"><span class="ic">💚</span><span class="cd"></span></div>
 <div id="net-status">🔌 Chưa kết nối</div>
 <div id="leaderboard">
   <h3>🏆 BẢNG XẾP HẠNG</h3>
@@ -338,19 +346,32 @@ const Up={dmg:0,hp:0,speed:0,charge:0,reach:0,crit:0,armor:0,lifesteal:0,luck:0}
 const TITLES=['Tân Binh','Thợ Rừng','Tiều Phu','Phá Mộc','Cường Giả','Bá Vương Rừng Xanh'];
 const Me={hp:100,hpMax:100,dead:!1,respawn:0,name:'Bạn',kills:0,deaths:0,id:null,waiting:!1};
 // temporary buffs from picked-up items (giá trị = số giây còn lại)
-const Buff={rage:0,speed:0,crit:0,charge:0,shield:0};
+const Buff={rage:0,speed:0,crit:0,charge:0,shield:0,heal:0,immune:0,invis:0};
+// trạng thái BẤT LỢI đang chịu (do kỹ năng đối thủ gây ra), tính bằng giây còn lại
+const Status={slow:0,root:0};
 function upCost(u){return u.base+u.step*Up[u.id]}
 function totalLevels(){return UPGRADES.reduce((s,u)=>s+Up[u.id],0)}
 function playerLevel(){return 1+totalLevels()}
 function playerTitle(){return TITLES[Math.min(TITLES.length-1,Math.floor(totalLevels()/3))]}
 function baseDamage(){return Math.round((10+Up.dmg*3)*(Buff.rage>0?1.5:1)*curWeapon.dmgMul)}
 function maxHP(){return 100+Up.hp*25}
-function moveSpeed(){return 3.2*(1+Up.speed*0.12)*(Buff.speed>0?1.4:1)*curWeapon.speedMul}
+// tốc độ: buff thần tốc + tàng hình kiếm gió tăng tốc; bị Sương Độc (slow) giảm; bị Trói (root) đứng im
+function moveSpeed(){
+  if(Status.root>0)return 0;
+  let s=3.2*(1+Up.speed*0.12)*(Buff.speed>0?1.4:1)*curWeapon.speedMul;
+  if(Buff.invis>0)s*=1.35;                       // Kiếm Gió tàng hình → nhanh hơn
+  if(Status.slow>0)s*=0.45;                       // dính Sương Độc → chậm
+  return s;
+}
 function chargeTime(){return CHARGE_TIME*Math.pow(0.9,Up.charge)*(Buff.charge>0?0.5:1)*curWeapon.chargeMul}
 function attackReach(){return (2.4+Up.reach*0.35)*curWeapon.reachMul}
 function critChance(){return Up.crit*0.06+(Buff.crit>0?0.35:0)}
-function armor(){return Math.min(0.7,Up.armor*0.05+(Buff.shield>0?0.4:0))}   // % sát thương giảm
-function lifeSteal(){return Up.lifesteal*0.08}                               // % hồi từ dmg gây ra
+// giáp: nâng cấp + khiên nhặt được + BỊ ĐỘNG "Da Đá" của Búa (+15%)
+function armor(){let a=Up.armor*0.05+(Buff.shield>0?0.4:0);if(curWeapon.passive&&curWeapon.passive.name==='Da Đá')a+=0.15;return Math.min(0.85,a)}
+// hút máu: nâng cấp + BỊ ĐỘNG "Song Sát" của Song Đao (+12%)
+function lifeSteal(){let l=Up.lifesteal*0.08;if(curWeapon.passive&&curWeapon.passive.name==='Song Sát')l+=0.12;return l}
+function dodgeChance(){return (curWeapon.passive&&curWeapon.passive.name==='Thân Pháp Gió')?0.25:0}  // Kiếm Gió né đòn
+function thornRatio(){return (curWeapon.passive&&curWeapon.passive.name==='Phản Kích')?0.25:0}       // Thương phản sát thương
 function dropChance(){return 0.16+Up.luck*0.06}                             // xác suất rơi khi bổ củi lúc giao tranh
 
 // ============== VŨ KHÍ (đổi vũ khí + skill riêng mỗi loại) ==============
@@ -360,19 +381,29 @@ function dropChance(){return 0.16+Up.luck*0.06}                             // x
 const WEAPONS=[
   {id:'axe',   icon:'🪓', name:'Rìu Nham Thạch', tint:0xff5a1e, model:'lava_axe.glb', dmgMul:1.0, reachMul:1.0, speedMul:1.0, chargeMul:1.0,
     trail:0xff5a1e, chipColor:0xffb060, styles:[0,1,3,4,7], viewScale:1.0,
-    desc:'Cân bằng, tụ lực mạnh.', skill:{id:'whirlwind', name:'Xoay Cuồng Phong', icon:'🌀', cd:12, dur:2.6, help:'Xoay tít gây sát thương diện rộng liên tục quanh bạn.'}},
+    desc:'Cân bằng, tụ lực mạnh.', skill:{id:'whirlwind', name:'Xoay Cuồng Phong', icon:'🌀', cd:12, dur:2.6, help:'Xoay tít gây sát thương diện rộng liên tục quanh bạn.'},
+    skill2:{id:'heal', name:'Hồi Sinh', icon:'💚', cd:16, dur:4, help:'Hồi máu mạnh liên tục trong 4 giây.'},
+    passive:{icon:'🌿', name:'Sinh Lực Núi Lửa', help:'Tự hồi máu nhanh hơn khi không bị đánh.'}},
   {id:'hammer',icon:'🔨', name:'Búa Chấn Địa',   tint:0x8899ff, model:'druidic_hammer.glb', dmgMul:1.6, reachMul:0.9, speedMul:0.82,chargeMul:1.35,
     trail:0x88aaff, chipColor:0xbcd0ff, styles:[1,7], viewScale:1.12, flip:!0,
-    desc:'Sát thương cực cao nhưng chậm.', skill:{id:'quake', name:'Chấn Địa', icon:'💥', cd:14, dur:0, help:'Nện đất gây sát thương lớn + hất văng mọi đối thủ xung quanh.'}},
+    desc:'Sát thương cực cao nhưng chậm.', skill:{id:'quake', name:'Chấn Địa', icon:'💥', cd:14, dur:0, help:'Nện đất gây sát thương lớn + hất văng mọi đối thủ xung quanh.'},
+    skill2:{id:'immune', name:'Bất Khả Xâm', icon:'🛡️', cd:20, dur:3, help:'Miễn toàn bộ sát thương trong 3 giây (kể cả boss).'},
+    passive:{icon:'🪨', name:'Da Đá', help:'Giảm thêm 15% mọi sát thương nhận vào.'}},
   {id:'sword', icon:'⚔️', name:'Kiếm Gió',       tint:0x66ffcc, model:'saber_sword.glb', dmgMul:0.85,reachMul:1.15,speedMul:1.25,chargeMul:0.7,
     trail:0x66ffcc, chipColor:0xbafff0, styles:[3,4,5], viewScale:1.05, flip:!0,
-    desc:'Nhanh nhẹn, tầm với xa.', skill:{id:'dash', name:'Lao Vút', icon:'💨', cd:9, dur:0, help:'Lao thẳng về phía trước, chém trúng mọi kẻ trên đường.'}},
+    desc:'Nhanh nhẹn, tầm với xa.', skill:{id:'dash', name:'Lao Vút', icon:'💨', cd:9, dur:0, help:'Lao thẳng về phía trước, chém trúng mọi kẻ trên đường.'},
+    skill2:{id:'invis', name:'Tàng Hình', icon:'👻', cd:18, dur:4, help:'Tàng hình + chạy nhanh, đối thủ khó thấy bạn trong 4 giây.'},
+    passive:{icon:'🍃', name:'Thân Pháp Gió', help:'25% cơ hội né hoàn toàn một đòn đánh.'}},
   {id:'dual',  icon:'🗡️', name:'Song Đao',       tint:0xff66aa, model:'sword_and_dagger.glb', dmgMul:0.7, reachMul:0.95,speedMul:1.4, chargeMul:0.6,
     trail:0xff66aa, chipColor:0xffc0e0, styles:[2,3,4], viewScale:0.95, flip:!0, twoHand:!0,
-    desc:'Đánh cực nhanh, sát thương thấp.', skill:{id:'flurry', name:'Liên Trảm', icon:'🌪️', cd:10, dur:1.6, help:'Chém liên hoàn cực nhanh vào kẻ địch gần nhất.'}},
+    desc:'Đánh cực nhanh, sát thương thấp.', skill:{id:'flurry', name:'Liên Trảm', icon:'🌪️', cd:10, dur:1.6, help:'Chém liên hoàn cực nhanh vào kẻ địch gần nhất.'},
+    skill2:{id:'slowfield', name:'Sương Độc', icon:'🕸️', cd:14, dur:0, help:'Toả sương làm chậm mọi đối thủ quanh bạn trong 3.5 giây.'},
+    passive:{icon:'🩸', name:'Song Sát', help:'Hút 12% sát thương gây ra thành máu.'}},
   {id:'spear', icon:'🔱', name:'Thương Xuyên Kích',tint:0xffe066,model:'spear.glb',dmgMul:1.1, reachMul:1.5, speedMul:0.95,chargeMul:1.0,
     trail:0xffe066, chipColor:0xfff0a0, styles:[6,0], viewScale:1.15,
-    desc:'Tầm với rất xa.', skill:{id:'pierce', name:'Xuyên Kích', icon:'➹', cd:8, dur:0, help:'Đâm xuyên một đường dài, trúng mọi kẻ thẳng phía trước.'}},
+    desc:'Tầm với rất xa.', skill:{id:'pierce', name:'Xuyên Kích', icon:'➹', cd:8, dur:0, help:'Đâm xuyên một đường dài, trúng mọi kẻ thẳng phía trước.'},
+    skill2:{id:'root', name:'Trói Buộc', icon:'🪢', cd:13, dur:0, help:'Trói & choáng mọi kẻ địch thẳng phía trước trong 2 giây.'},
+    passive:{icon:'⚡', name:'Phản Kích', help:'Phản lại 25% sát thương cho kẻ đánh bạn.'}},
 ];
 const curWeapon={...WEAPONS[0]};        // vũ khí đang dùng (bản sao để truy chỉ số nhanh)
 let ownedWeapons={axe:!0};              // vũ khí đã mở khoá
@@ -1746,7 +1777,7 @@ function updateCamera(dt,time){
   cam.lookAt(camTarget);
 }
 // drag to rotate — auto-switches to free mode; pitch can reach top-down
-addEventListener('pointerdown',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn')||e.target.closest('#touch-ctl')||e.target.closest('#skill-btn')||e.target.closest('#chat-box')||e.target.closest('#chat-toggle'))return;dragging=!0;lastX=e.clientX;lastY=e.clientY;dragMoved=0});
+addEventListener('pointerdown',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn')||e.target.closest('#touch-ctl')||e.target.closest('#skill-btn')||e.target.closest('#skill2-btn')||e.target.closest('#chat-box')||e.target.closest('#chat-toggle'))return;dragging=!0;lastX=e.clientX;lastY=e.clientY;dragMoved=0});
 addEventListener('pointermove',e=>{
   if(!dragging)return;
   const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;
@@ -1808,7 +1839,8 @@ addEventListener('keydown',e=>{
   if(e.code==='Space'){e.preventDefault();if(!e.repeat)beginCharge()}
   else if(e.key==='f'||e.key==='F'){if(!e.repeat)tryChop()} // F = quick chop, no charge (A is used for strafing)
   else if(e.key==='u'||e.key==='U'){if(!e.repeat)toggleUpg()} // U = upgrade shop
-  else if(e.key==='e'||e.key==='E'){if(!e.repeat)useSkill()} // E = kỹ năng vũ khí
+  else if(e.key==='e'||e.key==='E'){if(!e.repeat)useSkill()} // E = kỹ năng tấn công
+  else if(e.key==='r'||e.key==='R'){if(!e.repeat)useSkill2()} // R = kỹ năng phòng thủ/khống chế
   else if(e.key==='q'||e.key==='Q'){cyclePOV()}
   else if(e.key>='1'&&e.key<='8'){povMode=(+e.key)-1;showPovLabel()}
   else if(e.key==='ArrowLeft'){povMode=7;orbitYaw+=0.15;showPovLabel()}
@@ -1961,7 +1993,10 @@ function renderWeapons(){
     row.innerHTML='<div class="wic">'+w.icon+'</div>'+
       '<div class="info"><div class="t">'+w.name+'</div>'+
       '<div class="d">'+w.desc+' · ⚔️x'+w.dmgMul+' 📏x'+w.reachMul+' 🏃x'+w.speedMul+'</div>'+
-      '<div class="sk">'+w.skill.icon+' '+w.skill.name+' — '+w.skill.help+' (hồi '+w.skill.cd+'s)</div></div>';
+      '<div class="sk">'+w.skill.icon+' <b>'+w.skill.name+'</b> (E) — '+w.skill.help+' · hồi '+w.skill.cd+'s</div>'+
+      (w.skill2?'<div class="sk">'+w.skill2.icon+' <b>'+w.skill2.name+'</b> (R) — '+w.skill2.help+' · hồi '+w.skill2.cd+'s</div>':'')+
+      (w.passive?'<div class="sk" style="color:#9effc0">'+w.passive.icon+' <b>'+w.passive.name+'</b> (bị động) — '+w.passive.help+'</div>':'')+
+      '</div>';
     const btn=document.createElement('button');
     if(equipped){btn.textContent='✓ Đang dùng';btn.disabled=!0}
     else if(owned){btn.textContent='Trang bị';btn.onclick=()=>{equipWeapon(w.id);renderWeapons()}}
@@ -1976,6 +2011,7 @@ function toggleWeapon(){
 }
 document.getElementById('weapon-btn').addEventListener('click',toggleWeapon);
 document.getElementById('skill-btn').addEventListener('click',useSkill);
+document.getElementById('skill2-btn').addEventListener('click',useSkill2);
 
 // ---------- kho ngoại hình (trang phục / hào quang từ boss) ----------
 const cosPanel=document.getElementById('cos-panel');
@@ -2184,19 +2220,37 @@ function tryHitOpponent(dmgBase,chg){
 }
 let lastHurt=0, lastCombat=0;
 function inCombat(){return performance.now()-lastCombat<9000}   // 9s sau đòn đánh coi là đang giao tranh
-function takeDamage(dmg,crit,fromName){
+function takeDamage(dmg,crit,fromName,extra){
   if(Me.dead||Me.waiting)return;
+  // 🕸️/🪢 hiệu ứng khống chế đi kèm đòn đánh (Sương Độc làm chậm, Trói Buộc trói+choáng)
+  if(extra){
+    if(extra.slow){Status.slow=Math.max(Status.slow,extra.slow);showFloat('🕸️ Bị làm chậm!','#c8a0ff')}
+    if(extra.root){Status.root=Math.max(Status.root,extra.root);showFloat('🪢 Bị trói!','#ffd36b')}
+  }
+  if(dmg<=0)return;
   lastHurt=performance.now();lastCombat=performance.now();
+  // 🛡️ Bất Khả Xâm (Búa): miễn toàn bộ sát thương
+  if(Buff.immune>0){showFloat('🛡️ MIỄN THƯƠNG!','#9fe3ff');emitChipsAt(guy.position.x,1.2,guy.position.z,6,1);return}
+  // 🍃 Thân Pháp Gió (Kiếm): cơ hội né sạch
+  if(dodgeChance()>0&&Math.random()<dodgeChance()){showFloat('🍃 NÉ!','#9effc0');return}
   dmg=Math.max(1,Math.round(dmg*(1-armor())));         // 🛡️ giáp giảm sát thương nhận
   Me.hp=Math.max(0,Me.hp-dmg);
   feed('🩸 <b>'+escapeHtml(fromName||'Đối thủ')+'</b> đánh bạn −'+dmg+(crit?' 💥':''));
   document.body.style.animation='shake .25s ease-out';setTimeout(()=>document.body.style.animation='',250);
   emitChipsAt(guy.position.x,1.0,guy.position.z,8,1);
+  // ⚡ Phản Kích (Thương): dội ngược 1 phần sát thương cho người đánh (nếu là người chơi)
+  if(thornRatio()>0&&extra&&extra.from&&extra.from!=='boss'&&netConnected()){
+    const back=Math.max(1,Math.round(dmg*thornRatio()));
+    netSendTo(extra.from,{t:'hit',dmg:back,crit:!1,from:Me.id,fromName:Me.name+' ⚡phản'});
+  }
   if(Me.hp<=0)die();
   updateUI();broadcastStats();
 }
 function die(){
   Me.dead=!0;Me.deaths++;Me.respawn=5;
+  // chết → gỡ mọi buff/khống chế đang treo
+  if(Buff.invis>0)setSelfInvisible(!1);
+  Buff.heal=0;Buff.immune=0;Buff.invis=0;Status.slow=0;Status.root=0;
   document.getElementById('dead-overlay').classList.add('on');
   feed('💀 Bạn đã bị hạ');
   saveProgress();
@@ -2298,6 +2352,12 @@ function updateItems(dt,time){
 function updateBuffs(dt){
   let changed=!1;
   for(const k in Buff){if(Buff[k]>0){Buff[k]=Math.max(0,Buff[k]-dt);if(Buff[k]===0)changed=!0}}
+  // 💚 Hồi Sinh (Rìu): hồi máu mạnh liên tục khi buff còn
+  if(Buff.heal>0&&!Me.dead){Me.hp=Math.min(maxHP(),Me.hp+dt*22);updateSelfHUD()}
+  // hết tàng hình → hiện lại + báo cho đối thủ un-hide
+  if(changed&&Buff.invis===0){setSelfInvisible(!1);if(netConnected())broadcastStats()}
+  // trạng thái bất lợi (làm chậm / trói) đếm ngược
+  for(const k in Status){if(Status[k]>0)Status[k]=Math.max(0,Status[k]-dt)}
   renderBuffHUD();
   if(changed)updateSelfHUD();
 }
@@ -2309,6 +2369,11 @@ function renderBuffHUD(){
   if(Buff.shield>0)active.push(['🛡️',Buff.shield]);
   if(Buff.crit>0)active.push(['💥',Buff.crit]);
   if(Buff.charge>0)active.push(['⚡',Buff.charge]);
+  if(Buff.heal>0)active.push(['💚',Buff.heal]);
+  if(Buff.immune>0)active.push(['🛡️',Buff.immune]);
+  if(Buff.invis>0)active.push(['👻',Buff.invis]);
+  if(Status.slow>0)active.push(['🕸️',Status.slow]);
+  if(Status.root>0)active.push(['🪢',Status.root]);
   el.innerHTML=active.map(([ic,t])=>'<span>'+ic+' '+Math.ceil(t)+'s</span>').join('');
 }
 // 💣 bom nổ: gây 45 sát thương lên mọi đối thủ trong bán kính 4m
@@ -2686,7 +2751,11 @@ function showFloatAt(wx,wy,wz,text,color){
 }
 
 // ============== KỸ NĂNG VŨ KHÍ ==============
+// Mỗi vũ khí có 2 kỹ năng: skill (tấn công, phím E) và skill2 (phòng thủ/khống
+// chế, phím R). skillActive/skillAnim dùng cho hoạt ảnh; buff/status riêng cho
+// nhóm phòng thủ (heal/immune/invis/slowfield/root).
 function skillReady(){const s=curWeapon.skill;return !skillActive&&(!(skillCd[s.id]>0))}
+function skill2Ready(){const s=curWeapon.skill2;return s&&!(skillCd[s.id]>0)}
 function useSkill(){
   if(Me.dead||Me.waiting)return;
   const s=curWeapon.skill;
@@ -2700,6 +2769,43 @@ function useSkill(){
   if(s.dur>0){skillActive={id:s.id,t:0,dur:s.dur};}     // whirlwind/flurry: kéo dài
   else{skillAnim={id:s.id,t:0,dur:0.55,fx:Math.sin(GUY_YAW),fz:Math.cos(GUY_YAW),done:!1};} // quake/dash/pierce: animation ngắn
   renderLeaderboard();broadcastStats();updateSkillHUD();
+}
+// kỹ năng thứ 2 (phòng thủ / khống chế) — phím R hoặc nút phụ
+function useSkill2(){
+  if(Me.dead||Me.waiting)return;
+  const s=curWeapon.skill2;if(!s)return;
+  if(!skill2Ready())return;
+  if(!netConnected()&&!Boss.active&&(s.id==='slowfield'||s.id==='root')){showFloat('⚔️ Khống chế chỉ dùng khi có đối thủ/boss','#ffd36b');return}
+  skillCd[s.id]=s.cd;
+  audio.split();
+  showFloat(s.icon+' '+s.name+'!','#9fe3ff');
+  if(s.id==='heal'){ Buff.heal=s.dur; }                          // Rìu: hồi máu liên tục
+  else if(s.id==='immune'){ Buff.immune=s.dur; }                 // Búa: miễn thương
+  else if(s.id==='invis'){ Buff.invis=s.dur; setSelfInvisible(!0); }  // Kiếm: tàng hình
+  else if(s.id==='slowfield'){                                    // Song Đao: sương làm chậm quanh mình
+    slowFieldFx();
+    dealControl((p,dx,dz,dist)=>dist<4.5,{slow:3.5},'🕸️');
+  }else if(s.id==='root'){                                        // Thương: trói thẳng phía trước
+    const fx=Math.sin(GUY_YAW),fz=Math.cos(GUY_YAW);
+    rootBeamFx(fx,fz);
+    dealControl((p,dx,dz,dist)=>{const along=dx*fx+dz*fz;const perp=Math.abs(dx*fz-dz*fx);return along>0&&along<7&&perp<1.4;},{root:2},'🪢');
+  }
+  renderLeaderboard();broadcastStats();updateSkillHUD();
+}
+// gửi hiệu ứng KHỐNG CHẾ (không sát thương) tới đối thủ trong vùng — dùng chung
+function dealControl(pred,extra,tag){
+  if(!netConnected())return 0;
+  let n=0;
+  for(const p of activePeers()){
+    if(p.st.dead)continue;
+    const dx=p.av.grp.position.x-guy.position.x, dz=p.av.grp.position.z-guy.position.z;
+    const dist=Math.hypot(dx,dz);
+    if(!pred(p,dx,dz,dist))continue;
+    netSendTo(p.id,{t:'hit',dmg:0,crit:!1,from:Me.id,fromName:Me.name+' '+tag,slow:extra.slow||0,root:extra.root||0});
+    showFloatAt(p.av.grp.position.x,2.2,p.av.grp.position.z,tag,'#c8a0ff');n++;
+  }
+  if(n)lastCombat=performance.now();
+  return n;
 }
 // gây hiệu ứng + sát thương của kỹ năng "một nhát" đúng vào khoảnh khắc va chạm
 function fireInstantSkill(a){
@@ -2739,11 +2845,39 @@ function clampToArena(){
   const R=22;const d=Math.hypot(guy.position.x,guy.position.z);
   if(d>R){guy.position.x*=R/d;guy.position.z*=R/d}
 }
+// ---- hiệu ứng cho nhóm kỹ năng phòng thủ/khống chế ----
+// vòng sương độc lan quanh mình (Song Đao — Sương Độc)
+let _slowRing=null;
+function slowFieldFx(){
+  if(!_slowRing){const g=new T.RingGeometry(0.2,0.6,40);g.rotateX(-Math.PI/2);
+    _slowRing=new T.Mesh(g,new T.MeshBasicMaterial({color:0xc89bff,transparent:!0,opacity:0,side:T.DoubleSide,depthWrite:!1,blending:T.AdditiveBlending}));sc.add(_slowRing)}
+  _slowRing.position.set(guy.position.x,0.06,guy.position.z);_slowRing.scale.setScalar(1);_slowRing.material.opacity=0.85;_slowRing.userData.t=0;_slowRing.visible=!0;
+  emitChipsAt(guy.position.x,.6,guy.position.z,26,1.8);
+}
+// tia trói phóng thẳng phía trước (Thương — Trói Buộc)
+let _rootBeam=null;
+function rootBeamFx(fx,fz){
+  if(!_rootBeam){const g=new T.BoxGeometry(0.5,0.1,7);
+    _rootBeam=new T.Mesh(g,new T.MeshBasicMaterial({color:0xffd36b,transparent:!0,opacity:0,depthWrite:!1,blending:T.AdditiveBlending}));sc.add(_rootBeam)}
+  _rootBeam.position.set(guy.position.x+fx*3.5,0.4,guy.position.z+fz*3.5);
+  _rootBeam.rotation.y=Math.atan2(fx,fz);_rootBeam.material.opacity=0.9;_rootBeam.userData.t=0;_rootBeam.visible=!0;
+  emitChipsAt(guy.position.x+fx*3,0.8,guy.position.z+fz*3,20,1.5);
+}
+// tàng hình bản thân: mờ toàn thân (đối thủ nhận Buff.invis qua stats sẽ mờ avatar)
+function setSelfInvisible(on){
+  guy.traverse(o=>{if(o.material&&o.material.transparent!==undefined){
+    if(on){if(o.userData._op===undefined)o.userData._op=o.material.opacity;o.material.transparent=!0;o.material.opacity=0.28;}
+    else if(o.userData._op!==undefined){o.material.opacity=o.userData._op;o.material.transparent=o.userData._op<1;delete o.userData._op;}
+  }});
+}
 // cập nhật skill đang chạy (whirlwind / flurry) + animation "một nhát" + hồi chiêu
 let skillTickAcc=0;
 let skillAnim=null;                       // {id,t,dur,fx,fz,done} cho quake/dash/pierce
 function updateSkills(dt){
   for(const k in skillCd){if(skillCd[k]>0){skillCd[k]=Math.max(0,skillCd[k]-dt)}}
+  // ---- hiệu ứng phòng thủ/khống chế lan/tắt dần ----
+  if(_slowRing&&_slowRing.visible){_slowRing.userData.t+=dt;const q=_slowRing.userData.t/0.6;_slowRing.scale.setScalar(1+q*8);_slowRing.material.opacity=Math.max(0,0.85*(1-q));if(q>=1)_slowRing.visible=!1;}
+  if(_rootBeam&&_rootBeam.visible){_rootBeam.userData.t+=dt;const q=_rootBeam.userData.t/0.4;_rootBeam.material.opacity=Math.max(0,0.9*(1-q));if(q>=1)_rootBeam.visible=!1;}
   // ---- vòng sóng Chấn Địa lan ra ----
   if(_quakeRing&&_quakeRing.visible){
     _quakeRing.userData.t+=dt;const q=_quakeRing.userData.t/0.5;
@@ -2808,13 +2942,27 @@ function updateSkills(dt){
 }
 function updateSkillHUD(){
   const btn=document.getElementById('skill-btn');if(!btn)return;
-  btn.classList.toggle('on',netConnected()||Boss.active);     // hiện nút skill khi chơi mạng hoặc có boss
+  const show=netConnected()||Boss.active;
+  btn.classList.toggle('on',show);     // hiện nút skill khi chơi mạng hoặc có boss
   const s=curWeapon.skill;const cd=skillCd[s.id]||0;
   btn.querySelector('.ic').textContent=s.icon;
   const cdEl=btn.querySelector('.cd');
   if(skillActive){cdEl.textContent='●';btn.classList.add('active');btn.classList.remove('ready')}
   else if(cd>0){cdEl.textContent=Math.ceil(cd)+'s';btn.classList.remove('active','ready')}
   else{cdEl.textContent='';btn.classList.add('ready');btn.classList.remove('active')}
+  // ---- kỹ năng thứ 2 (phòng thủ/khống chế) ----
+  const b2=document.getElementById('skill2-btn');if(!b2)return;
+  const s2=curWeapon.skill2;
+  b2.classList.toggle('on',show&&!!s2);
+  if(s2){
+    const cd2=skillCd[s2.id]||0;
+    b2.querySelector('.ic').textContent=s2.icon;
+    const c2=b2.querySelector('.cd');
+    const act=(s2.id==='heal'&&Buff.heal>0)||(s2.id==='immune'&&Buff.immune>0)||(s2.id==='invis'&&Buff.invis>0);
+    if(act){c2.textContent='●';b2.classList.add('active');b2.classList.remove('ready')}
+    else if(cd2>0){c2.textContent=Math.ceil(cd2)+'s';b2.classList.remove('active','ready')}
+    else{c2.textContent='';b2.classList.add('ready');b2.classList.remove('active')}
+  }
 }
 
 // ---- đổi vũ khí: cập nhật chỉ số + tải/hiện model vũ khí trên tay ----
@@ -2826,6 +2974,9 @@ function equipWeapon(id){
   _trailTint.setHex(w.trail||0xff5a1e);          // vệt chém đổi màu theo vũ khí
   if(typeof chips!=='undefined'&&chips.material)chips.material.color.setHex(w.chipColor||0xD9AE64); // tia lửa/mảnh vụn đổi màu
   skillActive=null;guy.rotation.z=0;
+  // đổi vũ khí → tắt các buff phòng thủ đang chạy (tránh treo tàng hình/miễn thương)
+  if(Buff.invis>0)setSelfInvisible(!1);
+  Buff.heal=0;Buff.immune=0;Buff.invis=0;
   try{localStorage.setItem('boCuiWeapon',id)}catch(e){}
   updateSelfHUD();updateSkillHUD();
   if(typeof netConnected==='function'&&netConnected())broadcastStats();  // báo đối thủ đổi vũ khí
@@ -2923,7 +3074,7 @@ function broadcast(obj){
   if(netRole==='host'){ for(const id in conns)rawSend(conns[id],obj); }
   else { rawSend(conns[hostId],{t:'relay',to:'*',msg:obj}); }
 }
-function statsPayload(){return {t:'stats',id:Me.id,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel(),dead:Me.dead,kills:Me.kills,deaths:Me.deaths,waiting:Me.waiting,name:Me.name,weapon:curWeapon.id,cos:equippedCos}}
+function statsPayload(){return {t:'stats',id:Me.id,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel(),dead:Me.dead,kills:Me.kills,deaths:Me.deaths,waiting:Me.waiting,name:Me.name,weapon:curWeapon.id,cos:equippedCos,inv:Buff.invis>0?1:0}}
 function broadcastStats(){broadcast(statsPayload())}
 function helloPayload(){return {t:'hello',id:Me.id,name:Me.name,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel(),dead:Me.dead,kills:Me.kills,deaths:Me.deaths,waiting:Me.waiting,weapon:curWeapon.id,cos:equippedCos}}
 
@@ -2962,7 +3113,7 @@ function applyMsg(d,fromId){
       break;
     }
     case 'hit':                          // this message is addressed to ME
-      takeDamage(d.dmg,d.crit,d.fromName);
+      takeDamage(d.dmg,d.crit,d.fromName,{from:d.from,slow:d.slow||0,root:d.root||0});
       if(d.kb){                          // hất văng khi trúng kỹ năng knockback
         const m=Math.hypot(d.kb.x,d.kb.z)||1;
         guy.position.x-=(d.kb.x/m)*2.2;guy.position.z-=(d.kb.z/m)*2.2;clampToArena();
@@ -2976,6 +3127,7 @@ function applyMsg(d,fromId){
       if(d.name)p.st.name=d.name;
       if(d.weapon)setRemoteWeapon(p,d.weapon);   // cập nhật model vũ khí khi họ đổi
       if(d.cos!==undefined){p.st.cos=d.cos||null;p.av.setCosmetic(p.st.cos)}  // đổi ngoại hình
+      if(d.inv!==undefined){p.st.inv=d.inv;setRemoteInvisible(p,!!d.inv)}      // 👻 tàng hình: làm mờ avatar họ
       renderLeaderboard();
       break;
     }
@@ -3439,6 +3591,13 @@ function sendLogState(kind){
   broadcast({t:'log',k:kind,hp:St.logHP,mhp:St.logMaxHP,seed:logSeed});
 }
 // interpolate & draw every remote avatar (with distance culling for big rooms)
+// làm mờ (tàng hình) avatar đối thủ khi họ bật kỹ năng Tàng Hình của Kiếm Gió
+function setRemoteInvisible(p,on){
+  p.av.grp.traverse(o=>{if(o.material&&o.material.opacity!==undefined&&o!==p.av.nameSpr&&o!==p.av.hpFg){
+    if(on){if(o.userData._op===undefined)o.userData._op=o.material.opacity;o.material.transparent=!0;o.material.opacity=0.18;}
+    else if(o.userData._op!==undefined){o.material.opacity=o.userData._op;o.material.transparent=o.userData._op<1;delete o.userData._op;}
+  }});
+}
 function updateRemote(dt){
   const cx=guy.position.x, cz=guy.position.z;
   for(const p of Object.values(peers)){
