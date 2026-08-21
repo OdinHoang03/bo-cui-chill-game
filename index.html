@@ -51,6 +51,27 @@ canvas{display:block}
 #my-hp .hpnum{margin-top:3px;opacity:.85;font-size:11px;text-align:right}
 #buff-bar{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 #buff-bar span{background:rgba(255,180,60,.22);border:1px solid rgba(255,200,90,.5);border-radius:8px;padding:2px 6px;font-size:11px;font-weight:700;color:#ffe27a}
+/* ===== SKILL BUTTON (kỹ năng vũ khí) ===== */
+#skill-btn{position:absolute;right:20px;bottom:96px;width:72px;height:72px;border-radius:50%;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);border:2px solid rgba(255,255,255,.25);display:none;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;z-index:22;user-select:none;transition:transform .15s}
+#skill-btn.on{display:flex}
+#skill-btn .ic{font-size:28px;line-height:1}
+#skill-btn .cd{font-size:12px;font-weight:800;color:#ffd36b;margin-top:1px}
+#skill-btn.ready{border-color:#7fe0a0;box-shadow:0 0 14px rgba(127,224,160,.6);animation:skillPulse 1.4s infinite}
+#skill-btn.active{border-color:#ffcf40;box-shadow:0 0 18px rgba(255,207,64,.8)}
+#skill-btn:hover{transform:scale(1.08)}
+@keyframes skillPulse{0%,100%{box-shadow:0 0 10px rgba(127,224,160,.4)}50%{box-shadow:0 0 20px rgba(127,224,160,.8)}}
+/* ===== WEAPON PANEL ===== */
+#weapon-list{display:flex;flex-direction:column;gap:9px;margin:10px 0}
+.wp-row{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:9px 12px}
+.wp-row.on{border-color:#7fe0a0;background:rgba(127,224,160,.12)}
+.wp-row .wic{font-size:26px}
+.wp-row .info{flex:1}
+.wp-row .info .t{font-weight:700;font-size:14px}
+.wp-row .info .d{font-size:11px;opacity:.75;margin-top:1px}
+.wp-row .info .sk{font-size:11px;color:#ffd36b;margin-top:2px}
+.wp-row button{background:#4d9e6a;border:none;border-radius:9px;padding:7px 13px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.wp-row button:hover{background:#5cb87c}
+.wp-row button:disabled{background:rgba(255,255,255,.14);cursor:default;color:#bbb}
 #upg-btn,#mp-btn{background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 16px;color:#fff;font-size:14px;cursor:pointer;transition:all .2s}
 #upg-btn:hover,#mp-btn:hover{background:rgba(255,255,255,.15);transform:scale(1.05)}
 .panel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(.94);width:min(92vw,460px);max-height:78vh;overflow-y:auto;background:rgba(16,24,18,.93);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:18px 20px;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:30}
@@ -159,13 +180,15 @@ canvas{display:block}
 <div id="pov-label" class="hidden">🎥 Người thứ 3</div>
 <div id="target-label" style="position:absolute;bottom:145px;left:50%;transform:translateX(-50%);color:#7fe0a0;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none"></div>
 <div id="charge-wrap"><div id="charge-bar"><div id="charge-fill"></div></div><div id="charge-label">TỤ LỰC</div></div>
-<div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • U: nâng cấp • F: bổ nhanh • Q/1-8: đổi góc • 🎁 Bổ củi lúc đánh nhau sẽ rơi vật phẩm!</div>
+<div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • U: nâng cấp • E: kỹ năng vũ khí • F: bổ nhanh • Q/1-8: đổi góc • 🎁 Bổ củi lúc đánh nhau sẽ rơi vật phẩm!</div>
 <div id="my-hp">
   <div class="row"><span class="nm" id="me-name" title="Bấm để đổi tên">Bạn</span><span class="lvl">Lv.<span id="me-lvl">1</span> · <span id="me-title">Tân Binh</span></span></div>
   <div class="hpbar" id="me-hpbar"><i id="me-hpfill"></i></div>
   <div class="hpnum"><span id="me-hp">100</span>/<span id="me-hpmax">100</span> HP · ⚔️ <span id="me-dmg">10</span> DMG</div>
+  <div id="me-weapon" style="margin-top:3px;font-size:11px;opacity:.85">🪓 Rìu Nham Thạch</div>
   <div id="buff-bar"></div>
 </div>
+<div id="skill-btn" title="Kỹ năng vũ khí (E)"><span class="ic">🌀</span><span class="cd"></span></div>
 <div id="net-status">🔌 Chưa kết nối</div>
 <div id="leaderboard">
   <h3>🏆 BẢNG XẾP HẠNG</h3>
@@ -194,6 +217,13 @@ canvas{display:block}
   <div class="sub">Farm gỗ bằng cách bổ củi &amp; đốn cây, rồi đổi lấy sức mạnh. Củi hiện có: <b id="upg-wood">0</b> 🪵</div>
   <div id="upg-list"></div>
   <div class="note">💡 Mỗi cấp làm giá tăng lên. Đốn cây trong rừng cho nhiều gỗ hơn bổ củi. 🛡️ Giáp giảm sát thương nhận, 🩸 Hút máu hồi HP khi đánh trúng, 🍀 Vận may tăng tỉ lệ & độ xịn của vật phẩm rơi. Nút mờ = chưa đủ gỗ (đưa chuột vào để xem còn thiếu bao nhiêu).</div>
+</div>
+<div id="weapon-panel" class="panel">
+  <button class="close" onclick="document.getElementById('weapon-panel').classList.remove('on')">✕</button>
+  <h2>🗡️ Kho vũ khí</h2>
+  <div class="sub">Mỗi vũ khí có chỉ số &amp; kỹ năng riêng (phím <b>E</b> hoặc nút tròn để dùng khi chơi mạng). Củi: <b id="wp-wood">0</b> 🪵</div>
+  <div id="weapon-list"></div>
+  <div class="note">💡 Mở khoá vũ khí bằng gỗ. Kỹ năng chỉ gây sát thương khi đang chơi mạng (có đối thủ).</div>
 </div>
 <div id="name-panel" class="panel">
   <button class="close" onclick="document.getElementById('name-panel').classList.remove('on')">✕</button>
@@ -234,7 +264,7 @@ canvas{display:block}
   <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → nhận <b>link mời</b> hoặc mã.<br>2. Gửi link/mã cho người kia (Zalo/Messenger…).<br>3. Người kia <b>bấm link</b> để vào thẳng, hoặc <b>Nhập mã</b> rồi bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ — lại gần và vung rìu để đánh nhau!<br><span style="opacity:.8">⚠️ Khác WiFi/4G có thể mất ~10s để kết nối. Nếu mãi không vào được, một số WiFi trường/công ty chặn P2P — hãy thử chuyển sang <b>4G/5G</b>.</span></div>
   <div class="note" id="mp-net-note" style="margin-top:8px">⚠️ Đang dùng kết nối P2P (PeerJS). Nếu khác mạng khó vào, có thể cắm server Cloudflare (xem README) để ổn định hơn.</div>
 </div>
-<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
+<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="weapon-btn">🗡️ Vũ khí</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -287,15 +317,37 @@ function upCost(u){return u.base+u.step*Up[u.id]}
 function totalLevels(){return UPGRADES.reduce((s,u)=>s+Up[u.id],0)}
 function playerLevel(){return 1+totalLevels()}
 function playerTitle(){return TITLES[Math.min(TITLES.length-1,Math.floor(totalLevels()/3))]}
-function baseDamage(){return Math.round((10+Up.dmg*3)*(Buff.rage>0?1.5:1))}
+function baseDamage(){return Math.round((10+Up.dmg*3)*(Buff.rage>0?1.5:1)*curWeapon.dmgMul)}
 function maxHP(){return 100+Up.hp*25}
-function moveSpeed(){return 3.2*(1+Up.speed*0.12)*(Buff.speed>0?1.4:1)}
-function chargeTime(){return CHARGE_TIME*Math.pow(0.9,Up.charge)*(Buff.charge>0?0.5:1)}
-function attackReach(){return 2.4+Up.reach*0.35}
+function moveSpeed(){return 3.2*(1+Up.speed*0.12)*(Buff.speed>0?1.4:1)*curWeapon.speedMul}
+function chargeTime(){return CHARGE_TIME*Math.pow(0.9,Up.charge)*(Buff.charge>0?0.5:1)*curWeapon.chargeMul}
+function attackReach(){return (2.4+Up.reach*0.35)*curWeapon.reachMul}
 function critChance(){return Up.crit*0.06+(Buff.crit>0?0.35:0)}
 function armor(){return Math.min(0.7,Up.armor*0.05+(Buff.shield>0?0.4:0))}   // % sát thương giảm
 function lifeSteal(){return Up.lifesteal*0.08}                               // % hồi từ dmg gây ra
 function dropChance(){return 0.16+Up.luck*0.06}                             // xác suất rơi khi bổ củi lúc giao tranh
+
+// ============== VŨ KHÍ (đổi vũ khí + skill riêng mỗi loại) ==============
+// Mỗi vũ khí có chỉ số riêng (sát thương/tầm/tốc độ/tụ lực) và MỘT kỹ năng đặc
+// biệt kích hoạt bằng phím E (hoặc nút 💥), có hồi chiêu riêng. Kỹ năng gây sát
+// thương diện rộng lên đối thủ dùng lại kênh mạng 'hit' như đòn thường.
+const WEAPONS=[
+  {id:'axe',   icon:'🪓', name:'Rìu Nham Thạch', tint:0xff5a1e, dmgMul:1.0, reachMul:1.0, speedMul:1.0, chargeMul:1.0,
+    desc:'Cân bằng, tụ lực mạnh.', skill:{id:'whirlwind', name:'Xoay Cuồng Phong', icon:'🌀', cd:12, dur:2.6, help:'Xoay tít gây sát thương diện rộng liên tục quanh bạn.'}},
+  {id:'hammer',icon:'🔨', name:'Búa Chấn Địa',   tint:0x8899ff, dmgMul:1.6, reachMul:0.9, speedMul:0.82,chargeMul:1.35,
+    desc:'Sát thương cực cao nhưng chậm.', skill:{id:'quake', name:'Chấn Địa', icon:'💥', cd:14, dur:0, help:'Nện đất gây sát thương lớn + hất văng mọi đối thủ xung quanh.'}},
+  {id:'sword', icon:'⚔️', name:'Kiếm Gió',       tint:0x66ffcc, dmgMul:0.85,reachMul:1.15,speedMul:1.25,chargeMul:0.7,
+    desc:'Nhanh nhẹn, tầm với xa.', skill:{id:'dash', name:'Lao Vút', icon:'💨', cd:9, dur:0, help:'Lao thẳng về phía trước, chém trúng mọi kẻ trên đường.'}},
+  {id:'dual',  icon:'🗡️', name:'Song Đao',       tint:0xff66aa, dmgMul:0.7, reachMul:0.95,speedMul:1.4, chargeMul:0.6,
+    desc:'Đánh cực nhanh, sát thương thấp.', skill:{id:'flurry', name:'Liên Trảm', icon:'🌪️', cd:10, dur:1.6, help:'Chém liên hoàn cực nhanh vào kẻ địch gần nhất.'}},
+  {id:'spear', icon:'🔱', name:'Thương Xuyên Kích',tint:0xffe066,dmgMul:1.1, reachMul:1.5, speedMul:0.95,chargeMul:1.0,
+    desc:'Tầm với rất xa.', skill:{id:'pierce', name:'Xuyên Kích', icon:'➹', cd:8, dur:0, help:'Đâm xuyên một đường dài, trúng mọi kẻ thẳng phía trước.'}},
+];
+const curWeapon={...WEAPONS[0]};        // vũ khí đang dùng (bản sao để truy chỉ số nhanh)
+let ownedWeapons={axe:!0};              // vũ khí đã mở khoá
+const WEAPON_COST=40;                   // giá mở khoá bằng gỗ (trừ rìu mặc định)
+const skillCd={};                       // id skill -> thời gian hồi còn lại (giây)
+let skillActive=null;                   // {id, t, dur} khi skill đang chạy
 
 // ============== RENDERER + SCENE ==============
 const sc=new T.Scene();
@@ -1460,7 +1512,7 @@ function updateCamera(dt,time){
   cam.lookAt(camTarget);
 }
 // drag to rotate — auto-switches to free mode; pitch can reach top-down
-addEventListener('pointerdown',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn')||e.target.closest('#touch-ctl'))return;dragging=!0;lastX=e.clientX;lastY=e.clientY;dragMoved=0});
+addEventListener('pointerdown',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn')||e.target.closest('#touch-ctl')||e.target.closest('#skill-btn')||e.target.closest('#chat-box')||e.target.closest('#chat-toggle'))return;dragging=!0;lastX=e.clientX;lastY=e.clientY;dragMoved=0});
 addEventListener('pointermove',e=>{
   if(!dragging)return;
   const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;
@@ -1522,6 +1574,7 @@ addEventListener('keydown',e=>{
   if(e.code==='Space'){e.preventDefault();if(!e.repeat)beginCharge()}
   else if(e.key==='f'||e.key==='F'){if(!e.repeat)tryChop()} // F = quick chop, no charge (A is used for strafing)
   else if(e.key==='u'||e.key==='U'){if(!e.repeat)toggleUpg()} // U = upgrade shop
+  else if(e.key==='e'||e.key==='E'){if(!e.repeat)useSkill()} // E = kỹ năng vũ khí
   else if(e.key==='q'||e.key==='Q'){cyclePOV()}
   else if(e.key>='1'&&e.key<='8'){povMode=(+e.key)-1;showPovLabel()}
   else if(e.key==='ArrowLeft'){povMode=7;orbitYaw+=0.15;showPovLabel()}
@@ -1663,6 +1716,33 @@ function toggleUpg(){
 }
 document.getElementById('upg-btn').addEventListener('click',toggleUpg);
 
+// ---------- kho vũ khí (đổi vũ khí + xem skill) ----------
+const weaponPanel=document.getElementById('weapon-panel');
+function renderWeapons(){
+  document.getElementById('wp-wood').textContent=St.wood;
+  const list=document.getElementById('weapon-list');list.innerHTML='';
+  for(const w of WEAPONS){
+    const owned=!!ownedWeapons[w.id], equipped=curWeapon.id===w.id;
+    const row=document.createElement('div');row.className='wp-row'+(equipped?' on':'');
+    row.innerHTML='<div class="wic">'+w.icon+'</div>'+
+      '<div class="info"><div class="t">'+w.name+'</div>'+
+      '<div class="d">'+w.desc+' · ⚔️x'+w.dmgMul+' 📏x'+w.reachMul+' 🏃x'+w.speedMul+'</div>'+
+      '<div class="sk">'+w.skill.icon+' '+w.skill.name+' — '+w.skill.help+' (hồi '+w.skill.cd+'s)</div></div>';
+    const btn=document.createElement('button');
+    if(equipped){btn.textContent='✓ Đang dùng';btn.disabled=!0}
+    else if(owned){btn.textContent='Trang bị';btn.onclick=()=>{equipWeapon(w.id);renderWeapons()}}
+    else{const afford=St.wood>=WEAPON_COST;btn.textContent='🪵 '+WEAPON_COST;btn.disabled=!afford;btn.title=afford?'Mở khoá':'Cần '+WEAPON_COST+' gỗ';btn.onclick=()=>{if(St.wood<WEAPON_COST)return;St.wood-=WEAPON_COST;ownedWeapons[w.id]=!0;equipWeapon(w.id);saveProgress();updateUI();renderWeapons()}}
+    row.appendChild(btn);list.appendChild(row);
+  }
+}
+function toggleWeapon(){
+  const wasOn=weaponPanel.classList.contains('on');
+  closeAllPanels();
+  if(!wasOn){weaponPanel.classList.add('on');renderWeapons()}
+}
+document.getElementById('weapon-btn').addEventListener('click',toggleWeapon);
+document.getElementById('skill-btn').addEventListener('click',useSkill);
+
 // ---------- player name ----------
 const namePanel=document.getElementById('name-panel');
 function applyName(n){
@@ -1691,7 +1771,7 @@ document.getElementById('name-save').addEventListener('click',saveName);
 
 // ---------- save / load progression ----------
 function saveProgress(){
-  try{localStorage.setItem('boCuiSave',JSON.stringify({Up,wood:St.wood,score:St.score,chops:St.chops,maxCombo:St.maxCombo,kills:Me.kills,deaths:Me.deaths,name:Me.name}))}catch(e){}
+  try{localStorage.setItem('boCuiSave',JSON.stringify({Up,wood:St.wood,score:St.score,chops:St.chops,maxCombo:St.maxCombo,kills:Me.kills,deaths:Me.deaths,name:Me.name,weapons:ownedWeapons,weapon:curWeapon.id}))}catch(e){}
 }
 function loadProgress(){
   try{
@@ -1701,6 +1781,8 @@ function loadProgress(){
     St.wood=s.wood|0;St.score=s.score|0;St.chops=s.chops|0;St.maxCombo=s.maxCombo|0;
     Me.kills=s.kills|0;Me.deaths=s.deaths|0;
     if(s.name)Me.name=String(s.name).slice(0,14);
+    if(s.weapons&&typeof s.weapons==='object'){ownedWeapons={axe:!0,...s.weapons}}
+    if(s.weapon&&WEAPONS.find(w=>w.id===s.weapon))equipWeapon(s.weapon);
     document.getElementById('me-name').textContent=Me.name;
     Me.hpMax=maxHP();Me.hp=Me.hpMax;
   }catch(e){}
@@ -1984,7 +2066,129 @@ function bombBlast(){
   renderLeaderboard();broadcastStats();
 }
 
-// ============== MULTIPLAYER (PeerJS / WebRTC) ==============
+// ---- gây sát thương lên đối thủ trong vùng (dùng cho kỹ năng vũ khí) ----
+// pred(p, dx, dz, dist) -> true nếu đối thủ p bị trúng. tag hiện trong kill feed.
+function dealAreaDamage(dmg,pred,tag,knockback){
+  if(!netConnected())return 0;
+  let hits=0;
+  for(const p of activePeers()){
+    if(p.st.dead)continue;
+    const dx=p.av.grp.position.x-guy.position.x, dz=p.av.grp.position.z-guy.position.z;
+    const dist=Math.hypot(dx,dz);
+    if(!pred(p,dx,dz,dist))continue;
+    const crit=Math.random()<critChance();
+    const real=Math.round(dmg*(crit?2:1));
+    p.st.hp=Math.max(0,p.st.hp-real);hits++;
+    netSendTo(p.id,{t:'hit',dmg:real,crit,from:Me.id,fromName:Me.name+' '+tag,kb:knockback?{x:dx,z:dz}:0});
+    if(lifeSteal()>0&&Me.hp<maxHP()){Me.hp=Math.min(maxHP(),Me.hp+Math.max(1,Math.round(real*lifeSteal())))}
+    if(p.st.hp<=0&&!p.st.dead){
+      p.st.dead=!0;Me.kills++;St.wood+=5;St.score+=50;
+      feed('💀 '+tag+' hạ <b>'+escapeHtml(p.st.name)+'</b>!');
+      spawnItemDrop(p.av.grp.position.x,p.av.grp.position.z,!0);
+    }
+  }
+  if(hits)lastCombat=performance.now();
+  return hits;
+}
+
+// ============== KỸ NĂNG VŨ KHÍ ==============
+function skillReady(){const s=curWeapon.skill;return !skillActive&&(!(skillCd[s.id]>0))}
+function useSkill(){
+  if(Me.dead||Me.waiting)return;
+  const s=curWeapon.skill;
+  if(!skillReady()){return}
+  if(!netConnected()){showFloat('⚔️ Kỹ năng chỉ dùng khi chơi mạng','#ffd36b');return}
+  skillCd[s.id]=s.cd;
+  audio.split();
+  showFloat(s.icon+' '+s.name+'!','#ffe27a');
+  document.body.style.animation='shake .3s ease-out';setTimeout(()=>document.body.style.animation='',300);
+  if(s.dur>0){skillActive={id:s.id,t:0,dur:s.dur};}
+  // hiệu ứng tức thời cho các skill không kéo dài
+  if(s.id==='quake'){
+    emitChipsAt(guy.position.x,.4,guy.position.z,60,3.2);
+    dealAreaDamage(baseDamage()*2.2,(p,dx,dz,dist)=>dist<5,'💥',!0);
+  }else if(s.id==='dash'){
+    const fx=Math.sin(GUY_YAW),fz=Math.cos(GUY_YAW);
+    guy.position.x+=fx*4;guy.position.z+=fz*4;                 // lao tới
+    clampToArena();
+    trailOpacity=1;emitChipsAt(guy.position.x,.6,guy.position.z,26,1.8);
+    dealAreaDamage(baseDamage()*1.6,(p,dx,dz,dist)=>{
+      const along=dx*fx+dz*fz;const perp=Math.abs(dx*fz-dz*fx);
+      return along>-1&&along<5&&perp<1.6;                      // dọc đường lao
+    },'💨',!0);
+  }else if(s.id==='pierce'){
+    const fx=Math.sin(GUY_YAW),fz=Math.cos(GUY_YAW);
+    trailOpacity=1;emitChipsAt(guy.position.x+fx*2,.9,guy.position.z+fz*2,24,1.6);
+    dealAreaDamage(baseDamage()*1.9,(p,dx,dz,dist)=>{
+      const along=dx*fx+dz*fz;const perp=Math.abs(dx*fz-dz*fx);
+      return along>0&&along<7*curWeapon.reachMul&&perp<1.1;    // đường thẳng dài phía trước
+    },'🔱',!1);
+  }
+  renderLeaderboard();broadcastStats();updateSkillHUD();
+}
+function clampToArena(){
+  const R=22;const d=Math.hypot(guy.position.x,guy.position.z);
+  if(d>R){guy.position.x*=R/d;guy.position.z*=R/d}
+}
+// cập nhật skill đang chạy (whirlwind / flurry) + hồi chiêu
+let skillTickAcc=0;
+function updateSkills(dt){
+  for(const k in skillCd){if(skillCd[k]>0){skillCd[k]=Math.max(0,skillCd[k]-dt)}}
+  if(skillActive){
+    skillActive.t+=dt;skillTickAcc+=dt;
+    // xoay người liên tục
+    if(skillActive.id==='whirlwind'){
+      guy.rotation.y+=dt*22;                                   // xoay tít
+      trailOpacity=1;
+      if(skillTickAcc>0.28){skillTickAcc=0;
+        emitChipsAt(guy.position.x,.9,guy.position.z,10,1.4);
+        dealAreaDamage(baseDamage()*0.7,(p,dx,dz,dist)=>dist<2.6*curWeapon.reachMul,'🌀',!1);
+      }
+    }else if(skillActive.id==='flurry'){
+      // liên trảm: bổ liên tục vào kẻ gần nhất
+      rArm.rotation.x=ARM_IDLE+Math.sin(skillActive.t*40)*1.3;
+      trailOpacity=1;
+      if(skillTickAcc>0.16){skillTickAcc=0;
+        dealAreaDamage(baseDamage()*0.55,(p,dx,dz,dist)=>dist<attackReach(),'🌪️',!1);
+        emitChipsAt(guy.position.x+Math.sin(GUY_YAW)*1.4,1.0,guy.position.z+Math.cos(GUY_YAW)*1.4,6,1.2);
+      }
+    }
+    if(skillActive.t>=skillActive.dur){
+      skillActive=null;guy.rotation.z=0;
+    }
+  }
+  updateSkillHUD();
+}
+function updateSkillHUD(){
+  const btn=document.getElementById('skill-btn');if(!btn)return;
+  btn.classList.toggle('on',netConnected());     // chỉ hiện nút skill khi chơi mạng
+  const s=curWeapon.skill;const cd=skillCd[s.id]||0;
+  btn.querySelector('.ic').textContent=s.icon;
+  const cdEl=btn.querySelector('.cd');
+  if(skillActive){cdEl.textContent='●';btn.classList.add('active');btn.classList.remove('ready')}
+  else if(cd>0){cdEl.textContent=Math.ceil(cd)+'s';btn.classList.remove('active','ready')}
+  else{cdEl.textContent='';btn.classList.add('ready');btn.classList.remove('active')}
+}
+
+// ---- đổi vũ khí: cập nhật chỉ số + hình lưỡi vũ khí trên tay ----
+function equipWeapon(id){
+  const w=WEAPONS.find(x=>x.id===id);if(!w)return;
+  Object.assign(curWeapon,w);
+  // đổi màu phát sáng của lưỡi rìu (model lava) / fallback theo vũ khí
+  applyWeaponVisual(w);
+  skillActive=null;guy.rotation.z=0;
+  try{localStorage.setItem('boCuiWeapon',id)}catch(e){}
+  updateSelfHUD();updateSkillHUD();
+  const el=document.getElementById('me-weapon');if(el)el.textContent=w.icon+' '+w.name;
+}
+function applyWeaponVisual(w){
+  const tint=new T.Color(w.tint);
+  if(axeModelHolder){
+    axeModelHolder.traverse(o=>{if(o.isMesh&&o.material){o.material.emissive=tint.clone();o.material.needsUpdate=!0}});
+  }
+  // fallback blade cũng đổi màu
+  axeFallback.traverse(o=>{if(o.isMesh&&o.material&&o.material.emissive!==undefined){o.material.color=tint.clone()}});
+}
 // Two topologies:
 //  • 1v1   — direct P2P, exactly 2 players (the original mode).
 //  • room  — star: the HOST is the relay/authority. Guests connect to the host;
@@ -2101,6 +2305,10 @@ function applyMsg(d,fromId){
     }
     case 'hit':                          // this message is addressed to ME
       takeDamage(d.dmg,d.crit,d.fromName);
+      if(d.kb){                          // hất văng khi trúng kỹ năng knockback
+        const m=Math.hypot(d.kb.x,d.kb.z)||1;
+        guy.position.x-=(d.kb.x/m)*2.2;guy.position.z-=(d.kb.z/m)*2.2;clampToArena();
+      }
       break;
     case 'stats':{
       const p=getPeer(d.id||fromId);
@@ -2571,6 +2779,7 @@ function loop(){
   updateItems(dt,time);
   updateBuffs(dt);
   updateBubbles(dt);
+  updateSkills(dt);
 
   // ===== DRAGON-FIRE axe trail (wide additive ribbon) =====
   if(trailOpacity>.02){
@@ -2738,9 +2947,9 @@ function loop(){
 }
 
 // ============== START ==============
-loadProgress();                 // restore farmed wood + upgrade levels + name
+loadProgress();                 // restore farmed wood + upgrade levels + name + weapon
 spawnLog(!1);
-updateUI();
+updateUI();updateSkillHUD();
 document.getElementById('me-name').textContent=Me.name;
 setNet('🔌 Chưa kết nối — bấm "⚔️ Chơi mạng" để đấu với bạn',!1);
 // cập nhật ghi chú kết nối theo transport đang dùng
