@@ -49,6 +49,8 @@ canvas{display:block}
 .hpbar>i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#57d97a,#a8e063);transition:width .18s}
 .hpbar.low>i{background:linear-gradient(90deg,#ff5f5f,#ff9a5a)}
 #my-hp .hpnum{margin-top:3px;opacity:.85;font-size:11px;text-align:right}
+#buff-bar{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+#buff-bar span{background:rgba(255,180,60,.22);border:1px solid rgba(255,200,90,.5);border-radius:8px;padding:2px 6px;font-size:11px;font-weight:700;color:#ffe27a}
 #upg-btn,#mp-btn{background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 16px;color:#fff;font-size:14px;cursor:pointer;transition:all .2s}
 #upg-btn:hover,#mp-btn:hover{background:rgba(255,255,255,.15);transform:scale(1.05)}
 .panel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(.94);width:min(92vw,460px);max-height:78vh;overflow-y:auto;background:rgba(16,24,18,.93);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:18px 20px;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:30}
@@ -138,11 +140,12 @@ canvas{display:block}
 <div id="pov-label" class="hidden">🎥 Người thứ 3</div>
 <div id="target-label" style="position:absolute;bottom:145px;left:50%;transform:translateX(-50%);color:#7fe0a0;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none"></div>
 <div id="charge-wrap"><div id="charge-bar"><div id="charge-fill"></div></div><div id="charge-label">TỤ LỰC</div></div>
-<div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • U: nâng cấp • F: bổ nhanh • Q/1-8: đổi góc</div>
+<div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • U: nâng cấp • F: bổ nhanh • Q/1-8: đổi góc • 🎁 Bổ củi lúc đánh nhau sẽ rơi vật phẩm!</div>
 <div id="my-hp">
   <div class="row"><span class="nm" id="me-name" title="Bấm để đổi tên">Bạn</span><span class="lvl">Lv.<span id="me-lvl">1</span> · <span id="me-title">Tân Binh</span></span></div>
   <div class="hpbar" id="me-hpbar"><i id="me-hpfill"></i></div>
   <div class="hpnum"><span id="me-hp">100</span>/<span id="me-hpmax">100</span> HP · ⚔️ <span id="me-dmg">10</span> DMG</div>
+  <div id="buff-bar"></div>
 </div>
 <div id="net-status">🔌 Chưa kết nối</div>
 <div id="leaderboard">
@@ -163,7 +166,7 @@ canvas{display:block}
   <h2>🪵 Nâng cấp sức mạnh</h2>
   <div class="sub">Farm gỗ bằng cách bổ củi &amp; đốn cây, rồi đổi lấy sức mạnh. Củi hiện có: <b id="upg-wood">0</b> 🪵</div>
   <div id="upg-list"></div>
-  <div class="note">💡 Mỗi cấp làm giá tăng lên. Đốn cây trong rừng cho nhiều gỗ hơn bổ củi. Nút mờ = chưa đủ gỗ (đưa chuột vào để xem còn thiếu bao nhiêu).</div>
+  <div class="note">💡 Mỗi cấp làm giá tăng lên. Đốn cây trong rừng cho nhiều gỗ hơn bổ củi. 🛡️ Giáp giảm sát thương nhận, 🩸 Hút máu hồi HP khi đánh trúng, 🍀 Vận may tăng tỉ lệ & độ xịn của vật phẩm rơi. Nút mờ = chưa đủ gỗ (đưa chuột vào để xem còn thiếu bao nhiêu).</div>
 </div>
 <div id="name-panel" class="panel">
   <button class="close" onclick="document.getElementById('name-panel').classList.remove('on')">✕</button>
@@ -244,20 +247,28 @@ const UPGRADES=[
   {id:'charge',icon:'⚡', name:'Tụ lực nhanh',desc:'Tụ lực nhanh hơn 10% mỗi cấp', max:8,  base:5,  step:3},
   {id:'reach', icon:'📏', name:'Tầm với',     desc:'+0.35m tầm đánh mỗi cấp',      max:6,  base:5,  step:4},
   {id:'crit',  icon:'💥', name:'Chí mạng',    desc:'+6% tỉ lệ chí mạng (x2) mỗi cấp',max:8,base:6,  step:4},
+  {id:'armor', icon:'🛡️', name:'Giáp',        desc:'Giảm 5% sát thương nhận mỗi cấp',max:8,base:6,  step:4},
+  {id:'lifesteal',icon:'🩸',name:'Hút máu',   desc:'Hồi 8% sát thương gây ra (PvP) mỗi cấp',max:6,base:7,step:5},
+  {id:'luck',  icon:'🍀', name:'Vận may',     desc:'+8% tỉ lệ & chất lượng vật phẩm rơi mỗi cấp',max:6,base:6,step:4},
 ];
-const Up={dmg:0,hp:0,speed:0,charge:0,reach:0,crit:0};
+const Up={dmg:0,hp:0,speed:0,charge:0,reach:0,crit:0,armor:0,lifesteal:0,luck:0};
 const TITLES=['Tân Binh','Thợ Rừng','Tiều Phu','Phá Mộc','Cường Giả','Bá Vương Rừng Xanh'];
 const Me={hp:100,hpMax:100,dead:!1,respawn:0,name:'Bạn',kills:0,deaths:0,id:null,waiting:!1};
+// temporary buffs from picked-up items (giá trị = số giây còn lại)
+const Buff={rage:0,speed:0,crit:0,charge:0,shield:0};
 function upCost(u){return u.base+u.step*Up[u.id]}
 function totalLevels(){return UPGRADES.reduce((s,u)=>s+Up[u.id],0)}
 function playerLevel(){return 1+totalLevels()}
 function playerTitle(){return TITLES[Math.min(TITLES.length-1,Math.floor(totalLevels()/3))]}
-function baseDamage(){return 10+Up.dmg*3}
+function baseDamage(){return Math.round((10+Up.dmg*3)*(Buff.rage>0?1.5:1))}
 function maxHP(){return 100+Up.hp*25}
-function moveSpeed(){return 3.2*(1+Up.speed*0.12)}
-function chargeTime(){return CHARGE_TIME*Math.pow(0.9,Up.charge)}
+function moveSpeed(){return 3.2*(1+Up.speed*0.12)*(Buff.speed>0?1.4:1)}
+function chargeTime(){return CHARGE_TIME*Math.pow(0.9,Up.charge)*(Buff.charge>0?0.5:1)}
 function attackReach(){return 2.4+Up.reach*0.35}
-function critChance(){return Up.crit*0.06}
+function critChance(){return Up.crit*0.06+(Buff.crit>0?0.35:0)}
+function armor(){return Math.min(0.7,Up.armor*0.05+(Buff.shield>0?0.4:0))}   // % sát thương giảm
+function lifeSteal(){return Up.lifesteal*0.08}                               // % hồi từ dmg gây ra
+function dropChance(){return 0.16+Up.luck*0.06}                             // xác suất rơi khi bổ củi lúc giao tranh
 
 // ============== RENDERER + SCENE ==============
 const sc=new T.Scene();
@@ -1265,6 +1276,10 @@ function landHit(){
     // online: broadcast the log's new HP so others see it shrink (throttled)
     if(netConnected())broadcast({t:'log',k:'hp',seed:logSeed,hp:St.logHP,mhp:St.logMaxHP});
   }
+  // 🎁 Bổ củi KHI ĐANG GIAO TRANH có cơ hội rơi vật phẩm ngẫu nhiên
+  if(netConnected()&&inCombat()&&Math.random()<dropChance()){
+    spawnItemDrop(guy.position.x+(Math.random()-.5)*1.2, guy.position.z+(Math.random()-.5)*1.2, !1);
+  }
   updateUI();
 }
 
@@ -1673,6 +1688,15 @@ function showDamage(amount,crit){
   fb.textContent=(crit?'💥 CHÍ MẠNG -':'⚔️ -')+amount;
   fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
 }
+// small floating status text at screen center (buffs, heal, pickups)
+function showFloat(text,color){
+  const el=document.createElement('div');
+  el.textContent=text;
+  el.style.cssText='position:absolute;left:50%;top:44%;transform:translateX(-50%);pointer-events:none;font-weight:800;font-size:22px;z-index:40;text-shadow:0 2px 6px rgba(0,0,0,.6);color:'+(color||'#ffe27a');
+  el.style.animation='floatUp 1s ease-out';
+  document.getElementById('ui').appendChild(el);
+  setTimeout(()=>el.remove(),1000);
+}
 
 // ============== PvP COMBAT ==============
 // The ATTACKER resolves its own swing and tells the victim (authoritative-attacker
@@ -1701,18 +1725,30 @@ function tryHitOpponent(dmgBase,chg){
   // tell the victim directly (and, if I'm host, they hear it; if I'm guest, host relays)
   netSendTo(target.id,{t:'hit',dmg,crit,from:Me.id,fromName:Me.name});
   emitChipsAt(target.av.grp.position.x,1.0,target.av.grp.position.z,10+Math.round(chg*14),1+chg);
+  // 🩸 hút máu: hồi HP theo % sát thương gây ra
+  if(lifeSteal()>0&&Me.hp<maxHP()){
+    const heal=Math.max(1,Math.round(dmg*lifeSteal()));
+    Me.hp=Math.min(maxHP(),Me.hp+heal);
+    showFloat('+'+heal+'❤️','#6fe08a');
+  }
+  lastCombat=performance.now();                       // đang giao tranh → bổ củi sẽ rơi đồ
   if(target.st.hp<=0&&!target.st.dead){
     target.st.dead=!0;Me.kills++;
     St.wood+=5;St.score+=50;                        // bounty for a kill
     feed('💀 Bạn đã hạ <b>'+escapeHtml(target.st.name)+'</b>! +5🪵 +50đ');
+    // hạ gục cũng rơi 1-2 vật phẩm ngay tại chỗ đối thủ
+    spawnItemDrop(target.av.grp.position.x,target.av.grp.position.z,!0);
+    if(Math.random()<0.5)spawnItemDrop(target.av.grp.position.x+(Math.random()-.5),target.av.grp.position.z+(Math.random()-.5),!1);
     audio.split();saveProgress();renderLeaderboard();broadcastStats();
   }
   updateUI();return !0;
 }
-let lastHurt=0;
+let lastHurt=0, lastCombat=0;
+function inCombat(){return performance.now()-lastCombat<9000}   // 9s sau đòn đánh coi là đang giao tranh
 function takeDamage(dmg,crit,fromName){
   if(Me.dead||Me.waiting)return;
-  lastHurt=performance.now();
+  lastHurt=performance.now();lastCombat=performance.now();
+  dmg=Math.max(1,Math.round(dmg*(1-armor())));         // 🛡️ giáp giảm sát thương nhận
   Me.hp=Math.max(0,Me.hp-dmg);
   feed('🩸 <b>'+escapeHtml(fromName||'Đối thủ')+'</b> đánh bạn −'+dmg+(crit?' 💥':''));
   document.body.style.animation='shake .25s ease-out';setTimeout(()=>document.body.style.animation='',250);
@@ -1753,6 +1789,105 @@ function updateDeath(dt){
   Me.respawn-=dt;
   document.getElementById('respawn-sec').textContent=Math.max(0,Math.ceil(Me.respawn));
   if(Me.respawn<=0)respawnMe();
+}
+
+// ============== HỆ THỐNG VẬT PHẨM RƠI (loot khi giao tranh) ==============
+// Bổ củi lúc đang giao tranh, hoặc hạ gục đối thủ, có cơ hội rơi 1 vật phẩm.
+// Vật phẩm nổi & xoay trên sân; chạy tới gần sẽ tự nhặt. Loot là CỤC BỘ mỗi
+// người (không đồng bộ) để tránh tranh chấp nhặt trùng qua mạng.
+const ITEM_TYPES=[
+  {id:'heart', icon:'❤️', color:0xff5566, w:24, name:'Tim máu',    fx:()=>{Me.hp=Math.min(maxHP(),Me.hp+40);showFloat('+40 ❤️','#ff6b7d')}},
+  {id:'wood',  icon:'🪵', color:0xb9813f, w:26, name:'Bó củi',     fx:()=>{St.wood+=8;showFloat('+8 🪵','#e0b060')}},
+  {id:'rage',  icon:'🔥', color:0xff7a2a, w:14, name:'Cuồng nộ',   fx:()=>{Buff.rage=10;showFloat('🔥 CUỒNG NỘ! Sát thương x1.5','#ff9a44')}},
+  {id:'swift', icon:'💨', color:0x66ccff, w:14, name:'Thần tốc',   fx:()=>{Buff.speed=10;showFloat('💨 THẦN TỐC! Chạy x1.4','#8ad4ff')}},
+  {id:'shield',icon:'🛡️', color:0x88ddff, w:12, name:'Khiên chắn', fx:()=>{Buff.shield=10;showFloat('🛡️ KHIÊN! Giảm 40% sát thương','#9fe3ff')}},
+  {id:'crit',  icon:'💥', color:0xffd23c, w:12, name:'Bạo kích',   fx:()=>{Buff.crit=10;showFloat('💥 BẠO KÍCH! +35% chí mạng','#ffe27a')}},
+  {id:'charge',icon:'⚡', color:0xfff06a, w:12, name:'Tụ lực tức thì',fx:()=>{Buff.charge=10;showFloat('⚡ TỤ LỰC NHANH x2!','#fff06a')}},
+  {id:'bomb',  icon:'💣', color:0x556070, w:10, name:'Bom nổ',     fx:()=>{bombBlast()}},
+];
+const items=[];               // {grp, type, life, bob, spin}
+function makeItemSprite(icon){
+  const cv=document.createElement('canvas');cv.width=cv.height=128;const x=cv.getContext('2d');
+  x.font='84px serif';x.textAlign='center';x.textBaseline='middle';x.fillText(icon,64,72);
+  const tex=new T.CanvasTexture(cv);tex.anisotropy=4;
+  const spr=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:!0,depthWrite:!1}));
+  spr.scale.set(.7,.7,.7);return spr;
+}
+function weightedItem(){
+  // 🍀 vận may kéo tỉ trọng về phía loot hiếm (buff) — cấp càng cao càng dễ ra đồ xịn
+  const luckShift=Up.luck*0.9;
+  let tot=0;const ws=ITEM_TYPES.map(t=>{const base=t.w;const rare=t.w<=14;const w=rare?base+luckShift:Math.max(4,base-luckShift*0.4);tot+=w;return w});
+  let r=Math.random()*tot;
+  for(let i=0;i<ITEM_TYPES.length;i++){if((r-=ws[i])<=0)return ITEM_TYPES[i]}
+  return ITEM_TYPES[0];
+}
+function spawnItemDrop(x,z,guaranteedGood){
+  if(items.length>40)return;                        // giữ nhẹ
+  let type=weightedItem();
+  if(guaranteedGood&&type.w>18)type=ITEM_TYPES[2+Math.floor(Math.random()*4)]; // kill → thiên về buff
+  const grp=new T.Group();
+  // đế phát sáng
+  const gem=new T.Mesh(new T.OctahedronGeometry(.18,0),new T.MeshStandardMaterial({color:type.color,emissive:type.color,emissiveIntensity:.6,metalness:.3,roughness:.35,transparent:!0,opacity:.92}));
+  gem.position.y=.55;grp.add(gem);
+  const halo=new T.Sprite(new T.SpriteMaterial({map:glowTex,color:type.color,transparent:!0,opacity:.55,depthWrite:!1,blending:T.AdditiveBlending}));
+  halo.scale.set(1.1,1.1,1.1);halo.position.y=.55;grp.add(halo);
+  const spr=makeItemSprite(type.icon);spr.position.y=.55;grp.add(spr);
+  grp.position.set(x,0,z);sc.add(grp);
+  items.push({grp,gem,type,life:18,bob:Math.random()*6.28,spin:0});
+}
+function updateItems(dt,time){
+  for(let i=items.length-1;i>=0;i--){
+    const it=items[i];
+    it.life-=dt;it.bob+=dt*3;it.spin+=dt*1.6;
+    it.gem.rotation.y=it.spin;it.gem.rotation.x=it.spin*.5;
+    it.grp.position.y=Math.sin(it.bob)*.12;
+    // nhấp nháy khi sắp biến mất
+    if(it.life<3)it.grp.visible=Math.floor(it.life*6)%2===0;
+    if(it.life<=0){sc.remove(it.grp);items.splice(i,1);continue}
+    // nhặt khi lại gần (chỉ khi còn sống & đang chơi)
+    if(!Me.dead&&!Me.waiting){
+      const d=Math.hypot(it.grp.position.x-guy.position.x,it.grp.position.z-guy.position.z);
+      if(d<1.1){
+        it.type.fx();audio.chop();feed('🎁 Nhặt được <b>'+it.type.name+'</b>');
+        emitChipsAt(it.grp.position.x,.6,it.grp.position.z,10,1.2);
+        sc.remove(it.grp);items.splice(i,1);
+        updateUI();if(netConnected())broadcastStats();
+      }
+    }
+  }
+}
+function updateBuffs(dt){
+  let changed=!1;
+  for(const k in Buff){if(Buff[k]>0){Buff[k]=Math.max(0,Buff[k]-dt);if(Buff[k]===0)changed=!0}}
+  renderBuffHUD();
+  if(changed)updateSelfHUD();
+}
+function renderBuffHUD(){
+  const el=document.getElementById('buff-bar');if(!el)return;
+  const active=[];
+  if(Buff.rage>0)active.push(['🔥',Buff.rage]);
+  if(Buff.speed>0)active.push(['💨',Buff.speed]);
+  if(Buff.shield>0)active.push(['🛡️',Buff.shield]);
+  if(Buff.crit>0)active.push(['💥',Buff.crit]);
+  if(Buff.charge>0)active.push(['⚡',Buff.charge]);
+  el.innerHTML=active.map(([ic,t])=>'<span>'+ic+' '+Math.ceil(t)+'s</span>').join('');
+}
+// 💣 bom nổ: gây 45 sát thương lên mọi đối thủ trong bán kính 4m
+function bombBlast(){
+  showFloat('💣 BOM NỔ!','#ff8844');
+  document.body.style.animation='shake .4s ease-out';setTimeout(()=>document.body.style.animation='',400);
+  emitChipsAt(guy.position.x,.8,guy.position.z,40,2.5);
+  if(!netConnected())return;
+  for(const p of activePeers()){
+    if(p.st.dead)continue;
+    const d=Math.hypot(p.av.grp.position.x-guy.position.x,p.av.grp.position.z-guy.position.z);
+    if(d<4){
+      const dmg=45;p.st.hp=Math.max(0,p.st.hp-dmg);
+      netSendTo(p.id,{t:'hit',dmg,crit:!0,from:Me.id,fromName:Me.name+' 💣'});
+      if(p.st.hp<=0&&!p.st.dead){p.st.dead=!0;Me.kills++;St.wood+=5;St.score+=50;feed('💥 Bom hạ <b>'+escapeHtml(p.st.name)+'</b>!')}
+    }
+  }
+  renderLeaderboard();broadcastStats();
 }
 
 // ============== MULTIPLAYER (PeerJS / WebRTC) ==============
@@ -2332,6 +2467,8 @@ function loop(){
   updateDeath(dt);
   netUpdate(dt);
   updateRemote(dt);
+  updateItems(dt,time);
+  updateBuffs(dt);
 
   // ===== DRAGON-FIRE axe trail (wide additive ribbon) =====
   if(trailOpacity>.02){
