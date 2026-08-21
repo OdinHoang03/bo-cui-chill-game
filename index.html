@@ -333,14 +333,19 @@ function dropChance(){return 0.16+Up.luck*0.06}                             // x
 // thương diện rộng lên đối thủ dùng lại kênh mạng 'hit' như đòn thường.
 const WEAPONS=[
   {id:'axe',   icon:'🪓', name:'Rìu Nham Thạch', tint:0xff5a1e, model:'lava_axe.glb', dmgMul:1.0, reachMul:1.0, speedMul:1.0, chargeMul:1.0,
+    trail:0xff5a1e, chipColor:0xffb060, styles:[0,1,3,4,7], viewScale:1.0,
     desc:'Cân bằng, tụ lực mạnh.', skill:{id:'whirlwind', name:'Xoay Cuồng Phong', icon:'🌀', cd:12, dur:2.6, help:'Xoay tít gây sát thương diện rộng liên tục quanh bạn.'}},
-  {id:'hammer',icon:'🔨', name:'Búa Chấn Địa',   tint:0x8899ff, model:'weapons/hammer.glb', dmgMul:1.6, reachMul:0.9, speedMul:0.82,chargeMul:1.35,
+  {id:'hammer',icon:'🔨', name:'Búa Chấn Địa',   tint:0x8899ff, model:'druidic_hammer.glb', dmgMul:1.6, reachMul:0.9, speedMul:0.82,chargeMul:1.35,
+    trail:0x88aaff, chipColor:0xbcd0ff, styles:[1,7], viewScale:1.12,
     desc:'Sát thương cực cao nhưng chậm.', skill:{id:'quake', name:'Chấn Địa', icon:'💥', cd:14, dur:0, help:'Nện đất gây sát thương lớn + hất văng mọi đối thủ xung quanh.'}},
-  {id:'sword', icon:'⚔️', name:'Kiếm Gió',       tint:0x66ffcc, model:'weapons/sword.glb', dmgMul:0.85,reachMul:1.15,speedMul:1.25,chargeMul:0.7,
+  {id:'sword', icon:'⚔️', name:'Kiếm Gió',       tint:0x66ffcc, model:'saber_sword.glb', dmgMul:0.85,reachMul:1.15,speedMul:1.25,chargeMul:0.7,
+    trail:0x66ffcc, chipColor:0xbafff0, styles:[3,4,5], viewScale:1.05,
     desc:'Nhanh nhẹn, tầm với xa.', skill:{id:'dash', name:'Lao Vút', icon:'💨', cd:9, dur:0, help:'Lao thẳng về phía trước, chém trúng mọi kẻ trên đường.'}},
-  {id:'dual',  icon:'🗡️', name:'Song Đao',       tint:0xff66aa, model:'weapons/dual.glb', dmgMul:0.7, reachMul:0.95,speedMul:1.4, chargeMul:0.6,
+  {id:'dual',  icon:'🗡️', name:'Song Đao',       tint:0xff66aa, model:'sword_and_dagger.glb', dmgMul:0.7, reachMul:0.95,speedMul:1.4, chargeMul:0.6,
+    trail:0xff66aa, chipColor:0xffc0e0, styles:[2,3,4], viewScale:0.95,
     desc:'Đánh cực nhanh, sát thương thấp.', skill:{id:'flurry', name:'Liên Trảm', icon:'🌪️', cd:10, dur:1.6, help:'Chém liên hoàn cực nhanh vào kẻ địch gần nhất.'}},
-  {id:'spear', icon:'🔱', name:'Thương Xuyên Kích',tint:0xffe066,model:'weapons/spear.glb',dmgMul:1.1, reachMul:1.5, speedMul:0.95,chargeMul:1.0,
+  {id:'spear', icon:'🔱', name:'Thương Xuyên Kích',tint:0xffe066,model:'spear.glb',dmgMul:1.1, reachMul:1.5, speedMul:0.95,chargeMul:1.0,
+    trail:0xffe066, chipColor:0xfff0a0, styles:[6,0], viewScale:1.15,
     desc:'Tầm với rất xa.', skill:{id:'pierce', name:'Xuyên Kích', icon:'➹', cd:8, dur:0, help:'Đâm xuyên một đường dài, trúng mọi kẻ thẳng phía trước.'}},
 ];
 const curWeapon={...WEAPONS[0]};        // vũ khí đang dùng (bản sao để truy chỉ số nhanh)
@@ -933,7 +938,7 @@ let AXE_EXTRA_YAW=0;          // set to Math.PI if the edge ends up facing backw
 // Build an auto-oriented, auto-scaled holder for ANY weapon glb, tinted by `emis`.
 // Reused for every weapon model so you can drop in Sketchfab .glb files and they
 // all seat correctly in the hand. Returns the holder group (already sized).
-function buildWeaponHolder(model,emis){
+function buildWeaponHolder(model,emis,viewScale){
   const gAlign=new T.Group();gAlign.add(model);
   const gFlip=new T.Group();gFlip.add(gAlign);
   const gYaw=new T.Group();gYaw.add(gFlip);
@@ -991,7 +996,7 @@ function buildWeaponHolder(model,emis){
 
   // 5) scale to target length, then seat so the grip is at y=0 and head at -Y
   box=bbox();box.getSize(size);
-  holder.scale.setScalar(AXE_TARGET_LEN/size.y);
+  holder.scale.setScalar(AXE_TARGET_LEN*(viewScale||1)/size.y);
   box=bbox();
   holder.position.y-=box.max.y;
 
@@ -1025,7 +1030,7 @@ function loadWeaponModel(w){
   showFallbackAxe(w.tint);               // show fallback while loading
   _gltfLoader.load(w.model,gltf=>{
     weaponLoading[w.id]=!1;
-    const holder=buildWeaponHolder(gltf.scene,w.tint);
+    const holder=buildWeaponHolder(gltf.scene,w.tint,w.viewScale);
     holder.visible=!1;axe.add(holder);weaponHolders[w.id]=holder;
     if(curWeapon.id===w.id){             // still the active weapon → show it
       axeFallback.visible=!1;if(axeModelHolder&&axeModelHolder!==holder)axeModelHolder.visible=!1;
@@ -1204,6 +1209,7 @@ const ribbon=new T.Mesh(ribGeo,ribMat);ribbon.frustumCulled=!1;sc.add(ribbon);
 const hot=[new T.Color(0xffffff),new T.Color(0xffd36b),new T.Color(0xff8a2b),new T.Color(0xff3b1e),new T.Color(0x7a0f05)];
 function hotColor(t){const s=t*(hot.length-1);const i=Math.min(hot.length-2,Math.floor(s));return hot[i].clone().lerp(hot[i+1],s-i)}
 let trailOpacity=0, swingPower=1;
+const _trailTint=new T.Color(0xff5a1e);   // màu vệt chém theo vũ khí hiện tại
 // glow sprite that rides the blade during a swing — use a RADIAL texture so it
 // renders as a soft round flare (a plain colored sprite shows as a hard square).
 function makeGlowTexture(){
@@ -1248,10 +1254,11 @@ const CHOP_STYLES=[
 ];
 let lastStyleIdx=-1;
 function pickStyle(){
+  // mỗi vũ khí có TẬP động tác riêng (curWeapon.styles). Rìu/kiếm... vung khác nhau.
+  const pool=(curWeapon.styles&&curWeapon.styles.length)?curWeapon.styles:[0,1,3,4,7];
   let idx;
-  if(St.combo>=4&&Math.random()<0.3)idx=8;          // spin finisher
-  else if(St.combo>=3&&Math.random()<0.35)idx=7;    // two-hand finisher
-  else{do{idx=Math.floor(Math.random()*7)}while(idx===lastStyleIdx)}
+  if(pool.length===1){idx=pool[0]}
+  else{do{idx=pool[Math.floor(Math.random()*pool.length)]}while(idx===lastStyleIdx&&pool.length>1)}
   lastStyleIdx=idx;
   return CHOP_STYLES[idx];
 }
@@ -2215,6 +2222,8 @@ function equipWeapon(id){
   const w=WEAPONS.find(x=>x.id===id);if(!w)return;
   Object.assign(curWeapon,w);
   loadWeaponModel(w);                 // tải/hiện đúng model glb của vũ khí (có cache + fallback)
+  _trailTint.setHex(w.trail||0xff5a1e);          // vệt chém đổi màu theo vũ khí
+  if(typeof chips!=='undefined'&&chips.material)chips.material.color.setHex(w.chipColor||0xD9AE64); // tia lửa/mảnh vụn đổi màu
   skillActive=null;guy.rotation.z=0;
   try{localStorage.setItem('boCuiWeapon',id)}catch(e){}
   updateSelfHUD();updateSkillHUD();
@@ -2827,6 +2836,7 @@ function loop(){
       ribPos[i*6+3]=top.x;ribPos[i*6+4]=top.y;ribPos[i*6+5]=top.z;
       const fade=1-i/(RB-1);
       const col=hotColor(1-fade);          // tip = white hot, tail = deep red
+      col.lerp(_trailTint,0.55);           // pha theo màu vệt của vũ khí đang dùng
       const b=fade*swingPower;
       ribCol[i*6]=col.r*b;ribCol[i*6+1]=col.g*b;ribCol[i*6+2]=col.b*b;
       ribCol[i*6+3]=col.r*b;ribCol[i*6+4]=col.g*b;ribCol[i*6+5]=col.b*b;
@@ -2836,6 +2846,7 @@ function loop(){
     ribMat.opacity=Math.min(1,trailOpacity)*0.9;
     // glow sprite on the blade
     const t2=axeTipWorld();glow.position.copy(t2);
+    glowMat.color.setHex(curWeapon.trail||0xff5a1e);   // flare theo màu vũ khí
     glowMat.opacity=Math.min(1,trailOpacity)*0.8;
     glow.scale.setScalar(0.7+swingPower*0.5);
   }else{ribMat.opacity=0;glowMat.opacity=0;trailTip.length=0;trailTop.length=0}
