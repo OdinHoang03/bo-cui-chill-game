@@ -41,7 +41,9 @@ canvas{display:block}
 /* ===== player HP + progression + multiplayer UI ===== */
 #my-hp{position:absolute;top:20px;left:20px;width:230px;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:9px 14px;color:#fff;font-size:12px}
 #my-hp .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
-#my-hp .nm{font-weight:700}
+#my-hp .nm{font-weight:700;cursor:pointer;border-bottom:1px dashed rgba(255,255,255,.35)}
+#my-hp .nm:hover{color:#f6d365}
+#name-panel .row2{display:flex;gap:8px;align-items:center}
 #my-hp .lvl{opacity:.75;font-size:11px}
 .hpbar{height:11px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);border-radius:6px;overflow:hidden}
 .hpbar>i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#57d97a,#a8e063);transition:width .18s}
@@ -93,7 +95,7 @@ canvas{display:block}
 <div id="charge-wrap"><div id="charge-bar"><div id="charge-fill"></div></div><div id="charge-label">TỤ LỰC</div></div>
 <div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • U: nâng cấp • F: bổ nhanh • Q/1-8: đổi góc</div>
 <div id="my-hp">
-  <div class="row"><span class="nm" id="me-name">Bạn</span><span class="lvl">Lv.<span id="me-lvl">1</span> · <span id="me-title">Tân Binh</span></span></div>
+  <div class="row"><span class="nm" id="me-name" title="Bấm để đổi tên">Bạn</span><span class="lvl">Lv.<span id="me-lvl">1</span> · <span id="me-title">Tân Binh</span></span></div>
   <div class="hpbar" id="me-hpbar"><i id="me-hpfill"></i></div>
   <div class="hpnum"><span id="me-hp">100</span>/<span id="me-hpmax">100</span> HP · ⚔️ <span id="me-dmg">10</span> DMG</div>
 </div>
@@ -106,6 +108,14 @@ canvas{display:block}
   <div class="sub">Farm gỗ bằng cách bổ củi &amp; đốn cây, rồi đổi lấy sức mạnh. Củi hiện có: <b id="upg-wood">0</b> 🪵</div>
   <div id="upg-list"></div>
   <div class="note">💡 Mỗi cấp làm giá tăng lên. Đốn cây trong rừng cho nhiều gỗ hơn bổ củi.</div>
+</div>
+<div id="name-panel" class="panel">
+  <button class="close" onclick="document.getElementById('name-panel').classList.remove('on')">✕</button>
+  <h2>✏️ Đặt tên nhân vật</h2>
+  <div class="sub">Tên này sẽ hiện trên đầu nhân vật của bạn khi chơi mạng và trong kill feed của đối thủ.</div>
+  <input id="name-input" placeholder="Nhập tên (tối đa 14 ký tự)" maxlength="14" autocomplete="off" spellcheck="false">
+  <button class="btn" id="name-save">💾 Lưu tên</button>
+  <div id="name-msg" class="note"></div>
 </div>
 <div id="mp-panel" class="panel">
   <button class="close" onclick="document.getElementById('mp-panel').classList.remove('on')">✕</button>
@@ -131,7 +141,7 @@ canvas{display:block}
   <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → hiện mã 6 ký tự.<br>2. Gửi mã đó cho người kia (Zalo/Messenger…).<br>3. Người kia bấm <b>Nhập mã để vào phòng</b>, điền mã, bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ áo đỏ — lại gần và vung rìu để đánh nhau!</div>
   <div class="note" style="margin-top:8px">⚠️ Dùng broker công khai miễn phí của PeerJS. Nếu mạng có NAT/firewall chặt, kết nối có thể thất bại — thử lại hoặc đổi mạng.</div>
 </div>
-<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
+<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -1321,8 +1331,11 @@ addEventListener('pointerup',e=>{
   if(charging)releaseCharge();else if(St.canChop&&!St.isChopping)tryChop();
 });
 addEventListener('keydown',e=>{
-  if(typingInField()){                       // let the user type the room code
-    if(e.key==='Enter')document.getElementById('mp-join-go').click();
+  if(typingInField()){                       // let the user type names / room codes
+    if(e.key==='Enter'){
+      if(document.activeElement.id==='name-input')document.getElementById('name-save').click();
+      else document.getElementById('mp-join-go').click();
+    }
     return;
   }
   if(e.key==='Escape'){document.querySelectorAll('.panel.on').forEach(p=>p.classList.remove('on'));return}
@@ -1406,9 +1419,34 @@ function buyUpgrade(u){
 function toggleUpg(){const on=upgPanel.classList.toggle('on');if(on)renderUpgrades()}
 document.getElementById('upg-btn').addEventListener('click',toggleUpg);
 
+// ---------- player name ----------
+const namePanel=document.getElementById('name-panel');
+function applyName(n){
+  n=(n||'').trim().slice(0,14);
+  if(!n)n='Tiều Phu';
+  Me.name=n;
+  document.getElementById('me-name').textContent=n;
+  saveProgress();
+  netSend({t:'hello',name:Me.name,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel()});
+}
+function openNamePanel(){
+  const inp=document.getElementById('name-input');
+  inp.value=Me.name==='Bạn'?'':Me.name;
+  document.getElementById('name-msg').textContent='';
+  namePanel.classList.add('on');
+  inp.focus();inp.select();
+}
+document.getElementById('name-btn').addEventListener('click',openNamePanel);
+document.getElementById('me-name').addEventListener('click',openNamePanel);
+document.getElementById('name-save').addEventListener('click',()=>{
+  applyName(document.getElementById('name-input').value);
+  document.getElementById('name-msg').textContent='✅ Đã lưu tên: '+Me.name;
+  setTimeout(()=>namePanel.classList.remove('on'),700);
+});
+
 // ---------- save / load progression ----------
 function saveProgress(){
-  try{localStorage.setItem('boCuiSave',JSON.stringify({Up,wood:St.wood,score:St.score,chops:St.chops,maxCombo:St.maxCombo,kills:Me.kills,deaths:Me.deaths}))}catch(e){}
+  try{localStorage.setItem('boCuiSave',JSON.stringify({Up,wood:St.wood,score:St.score,chops:St.chops,maxCombo:St.maxCombo,kills:Me.kills,deaths:Me.deaths,name:Me.name}))}catch(e){}
 }
 function loadProgress(){
   try{
@@ -1417,6 +1455,8 @@ function loadProgress(){
     if(s.Up)for(const k in Up)if(typeof s.Up[k]==='number')Up[k]=s.Up[k];
     St.wood=s.wood|0;St.score=s.score|0;St.chops=s.chops|0;St.maxCombo=s.maxCombo|0;
     Me.kills=s.kills|0;Me.deaths=s.deaths|0;
+    if(s.name)Me.name=String(s.name).slice(0,14);
+    document.getElementById('me-name').textContent=Me.name;
     Me.hpMax=maxHP();Me.hp=Me.hpMax;
   }catch(e){}
 }
@@ -1874,9 +1914,10 @@ function loop(){
 }
 
 // ============== START ==============
-loadProgress();                 // restore farmed wood + upgrade levels
+loadProgress();                 // restore farmed wood + upgrade levels + name
 spawnLog(!1);
 updateUI();
+document.getElementById('me-name').textContent=Me.name;
 setNet('🔌 Chưa kết nối — bấm "⚔️ Chơi mạng" để đấu với bạn',!1);
 cam.position.set(-6.5,4.2,6.5);
 loop();
