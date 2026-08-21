@@ -615,35 +615,53 @@ const axeFallback=new T.Group();
 axe.add(axeFallback);
 
 // ---- load the real lava-axe model ----
-// AUTO-ORIENT from geometry so it doesn't matter how the file was exported:
-//   • longest axis → vertical (the handle runs down the arm),
-//   • the heavy blade "head" (wider horizontal cross-section) → points DOWN (-Y)
-//     toward the wood, the hand grip sits at the TOP (y=0),
-//   • AXE_EDGE_YAW spins the head so the sharp edge faces into the swing.
+// IMPORTANT: we must NOT stack several angles onto one Euler (`model.rotation`).
+// Three.js applies Euler 'XYZ' as R = Rx·Ry·Rz, i.e. the Y spin happens BEFORE
+// the X axis-alignment — which silently undid the alignment and left the blade
+// sideways. Instead each step gets its OWN nested group so the order is exact:
+//   holder → gYaw → gFlip → gAlign → model
+// (innermost applies first: align long axis → flip head down → yaw edge forward)
 const AXE_TARGET_LEN=1.05;
-let AXE_EDGE_YAW=Math.PI/2;   // rotate head 90° so the cutting edge faces the swing dir
+let AXE_EXTRA_YAW=0;          // set to Math.PI if the edge ends up facing backwards
 new GLTFLoader().load('lava_axe.glb',gltf=>{
   const model=gltf.scene;
-  const holder=new T.Group();holder.add(model);
-  const tmpBox=()=>{holder.updateMatrixWorld(!0);return new T.Box3().setFromObject(model)};
+  const gAlign=new T.Group();gAlign.add(model);
+  const gFlip=new T.Group();gFlip.add(gAlign);
+  const gYaw=new T.Group();gYaw.add(gFlip);
+  const holder=new T.Group();holder.add(gYaw);
+  // holder stays DETACHED while measuring, so "world space" == holder space
+  const refresh=()=>holder.updateMatrixWorld(!0);
+  const bbox=()=>{refresh();return new T.Box3().setFromObject(model)};
 
-  // 1) center the model at the holder origin
-  let box=tmpBox();const center=new T.Vector3();box.getCenter(center);
+  // 1) center the raw model on the origin
+  let box=bbox();const center=new T.Vector3();box.getCenter(center);
   model.position.sub(center);
 
-  // 2) rotate the LONGEST axis to vertical (Y)
-  box=tmpBox();const size=new T.Vector3();box.getSize(size);
+  // 2) longest axis (the handle) → vertical Y
+  box=bbox();const size=new T.Vector3();box.getSize(size);
   const dims=[['x',size.x],['y',size.y],['z',size.z]].sort((a,b)=>b[1]-a[1]);
-  const longAxis=dims[0][0];
-  if(longAxis==='z')model.rotation.x=-Math.PI/2;
-  else if(longAxis==='x')model.rotation.z=-Math.PI/2;
+  if(dims[0][0]==='z')gAlign.rotation.x=-Math.PI/2;
+  else if(dims[0][0]==='x')gAlign.rotation.z=-Math.PI/2;
 
-  // 3) decide which end is the HEAD (larger horizontal cross-section) and make
-  //    it hang DOWN. Sample vertices in true world space (matrices forced fresh).
-  holder.updateMatrixWorld(!0);
-  box=new T.Box3().setFromObject(model);
+  // 3) sample vertices (in holder space) to learn the shape of each half
+  refresh();box=new T.Box3().setFromObject(model);
   const yMid=(box.min.y+box.max.y)/2;
-  let topW=0,botW=0,topN=0,botN=0;const va=new T.Vector3();
+  let topW=0,botW=0,topN=0,botN=0;
+  let bxMin=1e9,bxMax=-1e9,bzMin=1e9,bzMax=-1e9;   // spread inside the blade half
+  const va=new T.Vector3();
+  const collect=(isBottomBlade)=>{
+    refresh();
+    bxMin=1e9;bxMax=-1e9;bzMin=1e9;bzMax=-1e9;
+    model.traverse(o=>{if(o.isMesh&&o.geometry&&o.geometry.attributes.position){
+      const pos=o.geometry.attributes.position;
+      for(let i=0;i<pos.count;i+=7){
+        va.fromBufferAttribute(pos,i);o.localToWorld(va);
+        const inBlade=isBottomBlade?(va.y<yMid):(va.y>yMid);
+        if(inBlade){if(va.x<bxMin)bxMin=va.x;if(va.x>bxMax)bxMax=va.x;
+                    if(va.z<bzMin)bzMin=va.z;if(va.z>bzMax)bzMax=va.z;}
+      }
+    }});
+  };
   model.traverse(o=>{if(o.isMesh&&o.geometry&&o.geometry.attributes.position){
     const pos=o.geometry.attributes.position;
     for(let i=0;i<pos.count;i+=7){
@@ -653,16 +671,23 @@ new GLTFLoader().load('lava_axe.glb',gltf=>{
     }
   }});
   const topAvg=topN?topW/topN:0, botAvg=botN?botW/botN:0;
-  if(topAvg>botAvg)model.rotation.z+=Math.PI;     // wide head is up → flip it down
-  model.rotation.y+=AXE_EDGE_YAW;
+  const headOnTop=topAvg>botAvg;
+  if(headOnTop)gFlip.rotation.z=Math.PI;           // heavy head must hang DOWN
 
-  // 4) scale to target length & seat so grip=top(0), head hangs to -Y
-  box=tmpBox();box.getSize(size);
-  model.scale.setScalar(AXE_TARGET_LEN/size.y);
-  box=tmpBox();
-  model.position.y-=box.max.y;                     // top of the model at y=0
+  // 4) the blade is a flat plate; its THIN axis is the plate normal. The swing
+  //    happens in the arm's Y–Z plane, so the plate must lie in Y–Z → thin
+  //    axis must be X. If it is currently Z, yaw the whole head by 90°.
+  collect(!headOnTop);                              // sample the blade half
+  const xSpread=bxMax-bxMin, zSpread=bzMax-bzMin;
+  gYaw.rotation.y=(zSpread<xSpread?Math.PI/2:0)+AXE_EXTRA_YAW;
 
-  // 5) glowing lava emissive
+  // 5) scale to target length, then seat so the grip is at y=0 and head at -Y
+  box=bbox();box.getSize(size);
+  holder.scale.setScalar(AXE_TARGET_LEN/size.y);
+  box=bbox();
+  holder.position.y-=box.max.y;
+
+  // 6) glowing lava emissive
   model.traverse(o=>{if(o.isMesh){o.castShadow=!0;const m=o.material;if(m){
     m.emissive=new T.Color(0xff5a1e);
     if(m.map){m.emissiveMap=m.map;m.emissiveIntensity=0.9;}else{m.emissiveIntensity=0.0;}
