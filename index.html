@@ -202,7 +202,7 @@ canvas{display:block}
   </div>
   <div id="mp-msg" class="note" style="margin-top:8px"></div>
   <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → nhận <b>link mời</b> hoặc mã.<br>2. Gửi link/mã cho người kia (Zalo/Messenger…).<br>3. Người kia <b>bấm link</b> để vào thẳng, hoặc <b>Nhập mã</b> rồi bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ — lại gần và vung rìu để đánh nhau!<br><span style="opacity:.8">⚠️ Khác WiFi/4G có thể mất ~10s để kết nối. Nếu mãi không vào được, một số WiFi trường/công ty chặn P2P — hãy thử chuyển sang <b>4G/5G</b>.</span></div>
-  <div class="note" style="margin-top:8px">⚠️ Dùng broker công khai miễn phí của PeerJS. Nếu mạng có NAT/firewall chặt, kết nối có thể thất bại — thử lại hoặc đổi mạng.</div>
+  <div class="note" id="mp-net-note" style="margin-top:8px">⚠️ Đang dùng kết nối P2P (PeerJS). Nếu khác mạng khó vào, có thể cắm server Cloudflare (xem README) để ổn định hơn.</div>
 </div>
 <div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
@@ -1678,7 +1678,9 @@ function die(){
   feed('💀 Bạn đã bị hạ');
   saveProgress();
   broadcast({t:'died',id:Me.id});broadcastStats();renderLeaderboard();
-  // in ROOM (8-player) mode, dying may hand your slot to someone waiting
+  // ROOM mode: dying may hand your slot to someone waiting.
+  // WS: server decides & sends 'setWaiting'. P2P: host decides.
+  if(netMode==='ws')return;
   if(roomMode&&netRole==='host')hostHandleDeath(Me.id);
   else if(roomMode&&netRole==='guest')netSendTo(hostId,{t:'req-death',id:Me.id});
 }
@@ -1717,13 +1719,23 @@ let roomMode=!1;                     // false = 1v1, true = up to 8
 let hostId=null;                     // guest: the host's peer id
 let myCode=null;
 const conns={};                      // peerId -> DataConnection (host holds many; guest holds just the host)
+// ---- transport selection: Cloudflare server (WebSocket) or PeerJS (P2P) ----
+// Nếu bạn đã deploy server Cloudflare Worker, dán URL của nó vào đây, ví dụ:
+//   const SERVER_URL='wss://bo-cui-chill-server.ten-cua-ban.workers.dev';
+// Để trống ('') thì game tự dùng PeerJS P2P như cũ. Có thể tạm ghi đè bằng
+// ?server=wss://... trên URL để test mà không sửa file.
+let SERVER_URL='';
+try{const qs=new URLSearchParams(location.search);if(qs.get('server'))SERVER_URL=qs.get('server');else{const ls=localStorage.getItem('bocuiServer');if(ls)SERVER_URL=ls}}catch(e){}
+const USE_WS=!!SERVER_URL;           // true = dùng server Cloudflare
+let netMode=USE_WS?'ws':'p2p';
+let ws=null;
 const netStatus=document.getElementById('net-status');
 const mpPanel=document.getElementById('mp-panel');
 function setNet(txt,show){netStatus.textContent=txt;netStatus.classList.toggle('on',show!==!1)}
 function mpMsg(t){document.getElementById('mp-msg').textContent=t}
 function roomCode(){let s='';const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';for(let i=0;i<6;i++)s+=A[Math.floor(Math.random()*A.length)];return s}
 const PEER_PREFIX='bocui3d-';
-function netConnected(){return Object.keys(conns).length>0}
+function netConnected(){return netMode==='ws'?(ws&&ws.readyState===1):Object.keys(conns).length>0}
 // invite URL carries the code and the mode (#room=CODE&m=r|1)
 function inviteUrl(code){return location.origin+location.pathname+'#room='+code+'&m='+(roomMode?'r':'1')}
 function roomFromUrl(){
@@ -1762,14 +1774,17 @@ function ensurePeer(id){
 }
 // ---------- send helpers ----------
 function rawSend(c,obj){try{if(c&&c.open)c.send(obj)}catch(e){}}
+function wsSend(obj){try{if(ws&&ws.readyState===1)ws.send(JSON.stringify(obj))}catch(e){}}
 function netSendTo(id,obj){
-  // route a message to a specific peer. Guests can only reach the host directly,
-  // so anything aimed at another guest is relayed by the host.
+  if(netMode==='ws'){ wsSend({...obj,_to:id}); return }
+  // P2P: route a message to a specific peer. Guests can only reach the host
+  // directly, so anything aimed at another guest is relayed by the host.
   if(netRole==='host'){ if(conns[id])rawSend(conns[id],obj); }
   else { rawSend(conns[hostId],{t:'relay',to:id,msg:obj}); }
 }
 function broadcast(obj){
-  // send to everyone. Host → all conns. Guest → host, which relays to all others.
+  if(netMode==='ws'){ wsSend(obj); return }        // server rebroadcasts to all
+  // P2P: Host → all conns. Guest → host, which relays to all others.
   if(netRole==='host'){ for(const id in conns)rawSend(conns[id],obj); }
   else { rawSend(conns[hostId],{t:'relay',to:'*',msg:obj}); }
 }
@@ -1790,12 +1805,15 @@ function applyMsg(d,fromId){
       break;
     }
     case 'hello':{
-      const p=getPeer(d.id||fromId);
+      const pid=d.id||fromId;
+      const known=!!peers[pid];
+      const p=getPeer(pid);
       Object.assign(p.st,{name:d.name||'Đối thủ',hp:d.hp,hpMax:d.hpMax||100,lvl:d.lvl||1,dead:!!d.dead,kills:d.kills||0,deaths:d.deaths||0,waiting:!!d.waiting});
       p.av.setLabel(p.st.name+' Lv.'+p.st.lvl);
-      // reply so they learn about us too
-      netSendTo(d.id||fromId,helloPayload());
-      if(netRole==='host')sendRoster();
+      // reply ONCE (only the first time we meet them) so they learn about us —
+      // avoids an endless hello ping-pong.
+      if(!known)netSendTo(pid,helloPayload());
+      if(netMode==='p2p'&&netRole==='host')sendRoster();
       renderLeaderboard();
       break;
     }
@@ -1983,15 +2001,65 @@ document.getElementById('mp-btn').addEventListener('click',()=>{
   closeAllPanels();
   if(!wasOn)mpPanel.classList.add('on');
 });
+// ============== WEBSOCKET TRANSPORT (Cloudflare server) ==============
+// Connect to  wss://<server>/room/<CODE>?m=r|1&name=...  . The server assigns
+// our id (via 'welcome'), relays every message, and owns roster + waiting queue.
+function wsUrl(code){
+  let base=SERVER_URL.replace(/\/+$/,'');
+  return base+'/room/'+encodeURIComponent(code)+'?m='+(roomMode?'r':'1')+'&name='+encodeURIComponent(Me.name);
+}
+function wsConnect(code,asRoom,isHost){
+  roomMode=!!asRoom;netMode='ws';netRole=isHost?'host':'guest';myCode=code;
+  clearTimeout(joinTimer);
+  try{if(ws){ws.onclose=null;ws.close()}}catch(e){}
+  // clear any stale peers
+  for(const id in peers)removePeer(id);
+  setNet(isHost?'🟡 Đang mở phòng…':'🟡 Đang kết nối…',!0);
+  let opened=!1;
+  try{ws=new WebSocket(wsUrl(code))}catch(e){mpMsg('❌ URL server không hợp lệ.');showRetry();return}
+  joinTimer=setTimeout(()=>{if(!opened){mpMsg('❌ Không kết nối được server. Kiểm tra URL/mạng rồi bấm "Thử lại".');setNet('🔌 Kết nối thất bại',!0);showRetry();try{ws.close()}catch(e){}}},12000);
+  ws.onopen=()=>{
+    opened=!0;clearTimeout(joinTimer);hideRetry();
+    wsSend(helloPayload());
+  };
+  ws.onmessage=ev=>{
+    let d;try{d=JSON.parse(ev.data)}catch(e){return}
+    if(!d||!d.t)return;
+    if(d.t==='welcome'){
+      Me.id=d.id;roomMode=!!d.room;if(d.max)window.__srvMax=d.max;
+      // host keeps the panel open to show/share the code; guest closes it
+      if(netRole==='guest')mpPanel.classList.remove('on');
+      if(d.waiting){Me.waiting=!0;enterWaiting(d.slot)}
+      if(netRole==='host'){mpMsg('✅ Phòng đã mở trên server. Chia sẻ mã/link rồi giữ tab này.')}
+      else{setNet(roomMode?'🟢 Đã vào phòng':'🟢 Đã kết nối — PvP bật!',!0);feed('🟢 Đã vào phòng!')}
+      wsSend(helloPayload());renderLeaderboard();
+      return;
+    }
+    applyMsg(d,d.id);
+  };
+  ws.onclose=()=>{
+    if(!netConnected())setNet('🔌 Mất kết nối server',!0);
+    if(!opened){mpMsg('❌ Không kết nối được server.');showRetry()}
+    else feed('🔌 Mất kết nối tới phòng');
+    renderLeaderboard();
+  };
+  ws.onerror=()=>{if(!opened){mpMsg('❌ Lỗi kết nối server.');showRetry()}};
+}
 function startHosting(asRoom){
   roomMode=!!asRoom;
-  const code=roomCode();myCode=code;Me.id=PEER_PREFIX+code;
+  const code=roomCode();myCode=code;
   document.getElementById('mp-idle').style.display='none';
   document.getElementById('mp-hosting').style.display='block';
   document.getElementById('mp-code').textContent=code;
   document.getElementById('mp-link').textContent=inviteUrl(code);
-  document.getElementById('mp-mode-tag').textContent=roomMode?'👥 Phòng đông (tối đa 8 người)':'⚔️ Phòng 1v1';
+  document.getElementById('mp-mode-tag').textContent=(roomMode?'👥 Phòng đông (tối đa 8 người)':'⚔️ Phòng 1v1')+(USE_WS?' · 🌐 Server':' · P2P');
   mpMsg('Đang mở phòng…');netRole='host';
+  if(USE_WS){ Me.id=null; wsConnect(code,asRoom,!0);
+    // host cũng chỉ là một client trên server; mở xong thì chờ người vào
+    setNet(roomMode?'🟡 Phòng đông — mã '+code:'🟡 Đang chờ đối thủ — mã '+code,!0);
+    return;
+  }
+  Me.id=PEER_PREFIX+code;
   const p=ensurePeer(code);if(!p)return;
   clearTimeout(joinTimer);
   joinTimer=setTimeout(()=>{if(!peer||!peer.open){mpMsg('❌ Không mở được phòng (máy chủ ghép phòng bận). Thử lại sau vài giây.');setNet('🔌 Mở phòng thất bại',!0)}},12000);
@@ -2039,8 +2107,11 @@ function joinRoom(code,asRoom){
   code=(code||'').trim().toUpperCase();
   if(code.length<4){mpMsg('⚠️ Mã phòng không hợp lệ.');return}
   lastJoin={code,asRoom};hideRetry();
-  roomMode=!!asRoom;                    // provisional; host confirms via 'welcome'
-  mpMsg('Đang kết nối tới '+code+'… (khác mạng có thể mất ~10s)');setNet('🟡 Đang kết nối…',!0);netRole='guest';
+  roomMode=!!asRoom;                    // provisional; server/host confirms
+  mpMsg('Đang kết nối tới '+code+'…');setNet('🟡 Đang kết nối…',!0);netRole='guest';
+  if(USE_WS){ wsConnect(code,asRoom,!1); return }
+  // ---- PeerJS P2P fallback ----
+  mpMsg('Đang kết nối tới '+code+'… (khác mạng có thể mất ~10s)');
   // tear down any half-open peer from a previous attempt so it doesn't hang
   try{if(peer&&!peer.destroyed)peer.destroy()}catch(e){}
   for(const k in conns)delete conns[k];hostId=null;
@@ -2069,7 +2140,7 @@ document.getElementById('mp-retry').addEventListener('click',()=>{
 document.getElementById('mp-join-go').addEventListener('click',()=>{
   joinRoom(document.getElementById('mp-code-input').value,roomMode);
 });
-addEventListener('beforeunload',()=>{try{broadcast({t:'bye',id:Me.id})}catch(e){}});
+addEventListener('beforeunload',()=>{try{if(netMode==='ws'){if(ws)ws.close()}else broadcast({t:'bye',id:Me.id})}catch(e){}});
 
 // stream our position ~15×/s to everyone
 let netTick=0;
@@ -2360,6 +2431,8 @@ spawnLog(!1);
 updateUI();
 document.getElementById('me-name').textContent=Me.name;
 setNet('🔌 Chưa kết nối — bấm "⚔️ Chơi mạng" để đấu với bạn',!1);
+// cập nhật ghi chú kết nối theo transport đang dùng
+(function(){const n=document.getElementById('mp-net-note');if(n&&USE_WS)n.innerHTML='🌐 Đang dùng <b>server Cloudflare</b> — chơi được cả khi khác mạng, phòng vẫn sống khi người tạo thoát.';})();
 cam.position.set(-6.5,4.2,6.5);
 loop();
 addEventListener('beforeunload',saveProgress);
