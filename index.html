@@ -56,10 +56,11 @@ canvas{display:block}
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
 </div>
 <script type="importmap">
-{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
 </script>
 <script type="module">
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const T = THREE;
 // ============== AUDIO ENGINE ==============
 class AE{
@@ -589,47 +590,65 @@ const rArm=new T.Group();
 const rUp=new T.Mesh(new T.CylinderGeometry(.065,.075,.36,8),skin);rUp.position.y=-.18;rUp.castShadow=!0;rArm.add(rUp);
 const rHand=new T.Mesh(new T.SphereGeometry(.075,8,8),skin);rHand.position.y=-.37;rArm.add(rHand);
 
-// AXE — held in the right hand. Built so the haft runs along the arm and the
-// blade edge points DOWNWARD-FORWARD (toward the log) during a swing.
+// AXE — a real 3D "lava axe" model (lava_axe.glb) held in the right hand.
+// The `axe` group is the animation pivot (position/rotation/scale driven by the
+// chop + charge code). We keep two INVISIBLE marker objects — `grip` (hand end)
+// and `edgeStrip` (blade tip) — so the fire-trail sampler & crack placement keep
+// working regardless of the loaded mesh. A small procedural axe shows as a
+// fallback until the GLB finishes loading (or if it fails).
 const axe=new T.Group();
-// wooden haft (handle) along local Y
-const haft=new T.Mesh(new T.CylinderGeometry(.026,.036,.8,10),handleM);
-haft.position.y=-.34;axe.add(haft);
-// grip wrap near the hand
-const grip=new T.Mesh(new T.CylinderGeometry(.04,.04,.14,10),new T.MeshStandardMaterial({color:0x2b2016,roughness:1}));
-grip.position.y=-.02;axe.add(grip);
-// axe HEAD group at the far end of the haft.
-// Local frame: haft runs along +Y (grip) → the head sits at -Y (the "forward"
-// tip that leads the swing). The cutting edge must be a horizontal line ACROSS
-// the swing (local X) so it bites in the chop direction — NOT parallel to haft.
-const headMetal=new T.Group();
-// eye/poll (back of head) — sits behind the haft, up toward the grip
-const poll=new T.Mesh(new T.BoxGeometry(.11,.12,.09),steel);poll.position.set(0,.02,0);headMetal.add(poll);
-// SHARP blade: a wedge that tapers from a thick spine down to a keen edge line.
-// Cross-section (in Z–Y plane) is a triangle: thick at top, meeting at a point
-// at the bottom (the cutting edge). Extruded along X for the edge length.
-const bladeShape2=new T.Shape();
-bladeShape2.moveTo(-0.05,0.02);    // back-top (spine, thick)
-bladeShape2.lineTo(0.05,0.02);     // front-top
-bladeShape2.lineTo(0.005,-0.26);   // taper to a near-point at the edge
-bladeShape2.lineTo(-0.005,-0.26);
-bladeShape2.closePath();
-const bladeGeo=new T.ExtrudeGeometry(bladeShape2,{depth:0.30,bevelEnabled:!1});
-bladeGeo.translate(0,0,-0.15);     // center along X (extrude runs +Z→rotate)
-bladeGeo.rotateY(Math.PI/2);       // lay the width along X
-// group the blade + honed edge so we can rotate the whole cutting head 90°:
-// the keen edge now points STRAIGHT DOWN to the ground for an accurate chop.
-const bladeAssembly=new T.Group();
-const bladeShape=new T.Mesh(bladeGeo,edge);
-bladeShape.position.set(0,-.02,0);bladeAssembly.add(bladeShape);
-// slight flare cheeks so it reads as an axe bit
-const cheekL=new T.Mesh(new T.BoxGeometry(.05,.12,.09),steel);cheekL.position.set(0,-.02,0);bladeAssembly.add(cheekL);
-// bright honed cutting edge — a thin sharp bar at the very tip (-Y)
-const edgeStrip=new T.Mesh(new T.BoxGeometry(.33,.012,.012),new T.MeshStandardMaterial({color:0xffffff,metalness:.95,roughness:.05}));
-edgeStrip.position.set(0,-.27,0);bladeAssembly.add(edgeStrip);
-bladeAssembly.rotation.z=Math.PI/2;   // rotate blade 90° → edge/mũi faces down to the ground
-headMetal.add(bladeAssembly);
-headMetal.position.set(0,-.7,0);axe.add(headMetal);
+// invisible reference markers (top of haft near the hand, and the blade tip)
+const grip=new T.Object3D();grip.position.set(0,-.05,0);axe.add(grip);
+const edgeStrip=new T.Object3D();edgeStrip.position.set(0,-.9,0);axe.add(edgeStrip);
+// headMetal marker kept for any legacy references
+const headMetal=new T.Object3D();headMetal.position.set(0,-.7,0);axe.add(headMetal);
+
+// ---- procedural fallback (shown until the GLB loads) ----
+const axeFallback=new T.Group();
+{
+  const haft=new T.Mesh(new T.CylinderGeometry(.026,.036,.8,10),handleM);haft.position.y=-.34;axeFallback.add(haft);
+  const gripW=new T.Mesh(new T.CylinderGeometry(.04,.04,.14,10),new T.MeshStandardMaterial({color:0x2b2016,roughness:1}));gripW.position.y=-.02;axeFallback.add(gripW);
+  const bs=new T.Shape();bs.moveTo(-0.05,0.02);bs.lineTo(0.05,0.02);bs.lineTo(0.005,-0.26);bs.lineTo(-0.005,-0.26);bs.closePath();
+  const bg=new T.ExtrudeGeometry(bs,{depth:0.30,bevelEnabled:!1});bg.translate(0,0,-0.15);bg.rotateY(Math.PI/2);
+  const blade=new T.Mesh(bg,edge);blade.position.set(0,-.68,0);blade.rotation.z=Math.PI/2;axeFallback.add(blade);
+}
+axe.add(axeFallback);
+
+// ---- load the real lava-axe model ----
+// Tuning constants (easy to tweak): target haft length in world units, and an
+// orientation so the blade edge leads the downswing.
+const AXE_TARGET_LEN=1.05;
+new GLTFLoader().load('lava_axe.glb',gltf=>{
+  const model=gltf.scene;
+  // recenter & measure
+  const box=new T.Box3().setFromObject(model);
+  const size=new T.Vector3();box.getSize(size);
+  const center=new T.Vector3();box.getCenter(center);
+  model.position.sub(center);                       // center at origin
+  // wrap so we can orient the longest axis (the handle) along local Y
+  const holder=new T.Group();holder.add(model);
+  // longest dimension = handle length
+  const dims=[['x',size.x],['y',size.y],['z',size.z]].sort((a,b)=>b[1]-a[1]);
+  const longAxis=dims[0][0], longLen=dims[0][1];
+  if(longAxis==='z')holder.rotation.x=-Math.PI/2;   // Z → Y
+  else if(longAxis==='x')holder.rotation.z=Math.PI/2; // X → Y
+  // scale to target haft length
+  const s=AXE_TARGET_LEN/longLen;holder.scale.setScalar(s);
+  // after orienting, drop it so the hand grips the top and the head hangs down (-Y)
+  holder.position.y=-AXE_TARGET_LEN*0.5;
+  // brighten emissive lava so the glowing cracks read in-scene
+  model.traverse(o=>{if(o.isMesh){o.castShadow=!0;const m=o.material;if(m){m.emissive=new T.Color(0xff5a1e);m.emissiveIntensity=0.0;
+    // if the base texture encodes lava, use it as emissive map too for a glow
+    if(m.map){m.emissiveMap=m.map;m.emissiveIntensity=0.9;}
+    m.needsUpdate=!0;}}});
+  axe.remove(axeFallback);
+  axe.add(holder);
+  axeModelHolder=holder;
+  // place markers at the ends of the fitted model
+  grip.position.set(0,0,0);
+  edgeStrip.position.set(0,-AXE_TARGET_LEN,0);
+},undefined,err=>{console.warn('lava_axe.glb load failed, keeping fallback axe',err)});
+let axeModelHolder=null;
 // seat the axe in the hand: haft angled forward so the blade leads the swing
 axe.position.set(0,-.36,.04);
 axe.rotation.set(-1.55,0,0);
