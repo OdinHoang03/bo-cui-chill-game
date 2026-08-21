@@ -182,10 +182,14 @@ canvas{display:block}
     <button class="btn alt" id="mp-join-show">🔑 Nhập mã để vào phòng</button>
   </div>
   <div id="mp-hosting" style="display:none">
-    <div class="sub">Gửi mã này cho bạn của bạn:</div>
+    <div class="sub">Chia sẻ 1 trong 2 cách sau cho bạn của bạn:</div>
+    <div class="note" style="margin-bottom:4px">🔗 Link mời (bấm là vào thẳng):</div>
+    <div class="code" id="mp-link" style="font-size:13px;letter-spacing:0;word-break:break-all">…</div>
+    <button class="btn" id="mp-copy-link">🔗 Copy link mời</button>
+    <div class="note" style="margin:8px 0 4px">…hoặc gửi mã phòng:</div>
     <div class="code" id="mp-code">····</div>
     <button class="btn alt" id="mp-copy">📋 Copy mã</button>
-    <div class="note">Đang chờ đối thủ kết nối… Giữ tab này mở.</div>
+    <div class="note" style="margin-top:6px">Đang chờ đối thủ kết nối… Giữ tab này mở.</div>
   </div>
   <div id="mp-joining" style="display:none">
     <div class="sub">Dán/nhập mã phòng mà người tạo phòng gửi cho bạn:</div>
@@ -194,7 +198,7 @@ canvas{display:block}
     <button class="btn alt" id="mp-back">← Quay lại</button>
   </div>
   <div id="mp-msg" class="note" style="margin-top:8px"></div>
-  <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → hiện mã 6 ký tự.<br>2. Gửi mã đó cho người kia (Zalo/Messenger…).<br>3. Người kia bấm <b>Nhập mã để vào phòng</b>, điền mã, bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ áo đỏ — lại gần và vung rìu để đánh nhau!</div>
+  <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → nhận <b>link mời</b> hoặc mã.<br>2. Gửi link/mã cho người kia (Zalo/Messenger…).<br>3. Người kia <b>bấm link</b> để vào thẳng, hoặc <b>Nhập mã</b> rồi bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ áo đỏ — lại gần và vung rìu để đánh nhau!</div>
   <div class="note" style="margin-top:8px">⚠️ Dùng broker công khai miễn phí của PeerJS. Nếu mạng có NAT/firewall chặt, kết nối có thể thất bại — thử lại hoặc đổi mạng.</div>
 </div>
 <div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
@@ -1668,6 +1672,20 @@ function setNet(txt,show){netStatus.textContent=txt;netStatus.classList.toggle('
 function mpMsg(t){document.getElementById('mp-msg').textContent=t}
 function roomCode(){let s='';const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';for(let i=0;i<6;i++)s+=A[Math.floor(Math.random()*A.length)];return s}
 const PEER_PREFIX='bocui3d-';
+// build a shareable invite URL that carries the room code in the hash (#room=CODE)
+function inviteUrl(code){
+  const base=location.origin+location.pathname;
+  return base+'#room='+code;
+}
+// read a room code from the current URL (?room= or #room=)
+function roomFromUrl(){
+  let code='';
+  const h=location.hash||'';
+  const m=h.match(/room=([A-Za-z0-9]+)/);
+  if(m)code=m[1];
+  if(!code){const q=new URLSearchParams(location.search);code=q.get('room')||''}
+  return code.trim().toUpperCase();
+}
 function ensurePeer(id){
   if(typeof Peer==='undefined'){mpMsg('❌ Không tải được PeerJS (kiểm tra mạng).');return null}
   peer=id?new Peer(PEER_PREFIX+id):new Peer();
@@ -1763,6 +1781,7 @@ document.getElementById('mp-host').addEventListener('click',()=>{
   document.getElementById('mp-idle').style.display='none';
   document.getElementById('mp-hosting').style.display='block';
   document.getElementById('mp-code').textContent=code;
+  document.getElementById('mp-link').textContent=inviteUrl(code);
   mpMsg('Đang mở phòng…');netRole='host';
   const p=ensurePeer(code);if(!p)return;
   p.on('open',()=>{mpMsg('✅ Phòng đã mở. Chờ đối thủ…');setNet('🟡 Đang chờ đối thủ — mã '+code,!0)});
@@ -1784,16 +1803,28 @@ document.getElementById('mp-copy').addEventListener('click',async()=>{
   try{await navigator.clipboard.writeText(code);mpMsg('📋 Đã copy mã: '+code)}
   catch(e){mpMsg('⚠️ Không copy được — hãy chọn và copy mã thủ công.')}
 });
+document.getElementById('mp-copy-link').addEventListener('click',async()=>{
+  const url=document.getElementById('mp-link').textContent;
+  try{
+    // native share sheet on mobile if available, else clipboard
+    if(navigator.share){await navigator.share({title:'Bổ Củi Chill 3D — vào đấu với mình!',text:'Bấm link để vào phòng PvP:',url});mpMsg('🔗 Đã mở khung chia sẻ.')}
+    else{await navigator.clipboard.writeText(url);mpMsg('🔗 Đã copy link mời!')}
+  }catch(e){mpMsg('⚠️ Không copy được — hãy chọn và copy link thủ công.')}
+});
 // typing the code: force uppercase, Enter submits
 document.getElementById('mp-code-input').addEventListener('input',e=>{
   e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
 });
-document.getElementById('mp-join-go').addEventListener('click',()=>{
-  const code=(document.getElementById('mp-code-input').value||'').trim().toUpperCase();
+// core join routine, reused by manual entry AND by invite links
+function joinRoom(code){
+  code=(code||'').trim().toUpperCase();
   if(code.length<4){mpMsg('⚠️ Mã phòng không hợp lệ.');return}
   mpMsg('Đang kết nối tới '+code+'…');setNet('🟡 Đang kết nối…',!0);netRole='guest';
   const p=ensurePeer(null);if(!p)return;
   p.on('open',()=>{wireConn(p.connect(PEER_PREFIX+code,{reliable:!0}))});
+}
+document.getElementById('mp-join-go').addEventListener('click',()=>{
+  joinRoom(document.getElementById('mp-code-input').value);
 });
 // stream our position ~15×/s
 let netTick=0;
@@ -2080,6 +2111,20 @@ setNet('🔌 Chưa kết nối — bấm "⚔️ Chơi mạng" để đấu vớ
 cam.position.set(-6.5,4.2,6.5);
 loop();
 addEventListener('beforeunload',saveProgress);
+
+// ---- auto-join from an invite link (#room=CODE) ----
+(function autoJoinFromLink(){
+  const code=roomFromUrl();
+  if(!code)return;
+  // open the multiplayer panel and connect straight away
+  closeAllPanels();mpPanel.classList.add('on');
+  document.getElementById('mp-idle').style.display='none';
+  document.getElementById('mp-joining').style.display='block';
+  const inp=document.getElementById('mp-code-input');
+  if(inp)inp.value=code;
+  mpMsg('🔗 Vào phòng từ link mời: '+code);
+  joinRoom(code);
+})();
 console.log('🌲 Bổ Củi Chill Guy 3D 🪓 — sẵn sàng!');
 </script>
 </body>
