@@ -197,6 +197,7 @@ canvas{display:block}
     <div class="sub">Dán/nhập mã phòng mà người tạo phòng gửi cho bạn:</div>
     <input id="mp-code-input" placeholder="VD: ABC123" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <button class="btn" id="mp-join-go">🚪 Vào phòng</button>
+    <button class="btn" id="mp-retry" style="display:none;background:#c47f2a">🔄 Thử lại</button>
     <button class="btn alt" id="mp-back">← Quay lại</button>
   </div>
   <div id="mp-msg" class="note" style="margin-top:8px"></div>
@@ -1734,27 +1735,27 @@ function roomFromUrl(){
   if(!mode)mode=q.get('m')||'';
   return {code:code.trim().toUpperCase(),room:mode==='r'};
 }
-// ICE servers: STUN alone fails when a player is behind a strict/symmetric NAT
-// (mobile 4G/5G, school/office WiFi). TURN relays the traffic in that case so
-// players on completely different networks can still connect.
+// ICE servers: STUN handles most cases; TURN relays when a player is behind a
+// strict/symmetric NAT (mobile 4G/5G, school/office WiFi). We keep the list SMALL
+// and proven — too many (or dead/TLS) TURN entries make ICE gathering hang.
 const ICE_SERVERS=[
   {urls:'stun:stun.l.google.com:19302'},
   {urls:'stun:stun1.l.google.com:19302'},
-  {urls:'stun:global.stun.twilio.com:3478'},
-  // free public TURN relays (used only when direct/STUN fails on strict NATs).
-  // Multiple providers = better odds one is reachable.
+  // Metered OpenRelay free TURN (no signup). Both current & legacy hostnames.
   {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
   {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
   {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'},
-  {urls:'turn:freeturn.net:3478',username:'free',credential:'free'},
-  {urls:'turns:freeturn.net:5349',username:'free',credential:'free'},
 ];
 function ensurePeer(id){
   if(typeof Peer==='undefined'){mpMsg('❌ Không tải được PeerJS (kiểm tra mạng).');return null}
-  const opts={config:{iceServers:ICE_SERVERS,iceCandidatePoolSize:4}};
+  const opts={config:{iceServers:ICE_SERVERS}};
   peer=id?new Peer(PEER_PREFIX+id,opts):new Peer(opts);
   peer.on('error',e=>{
-    mpMsg('❌ Lỗi: '+(e.type==='unavailable-id'?'Mã phòng đã có người dùng, thử tạo lại.':(e.type==='peer-unavailable'?'Không tìm thấy phòng (mã sai hoặc host đã thoát).':e.type)));
+    const t=e&&e.type;
+    if(t==='unavailable-id'){mpMsg('❌ Mã phòng đã có người dùng, thử tạo lại.')}
+    else if(t==='peer-unavailable'){clearTimeout(joinTimer);mpMsg('❌ Không tìm thấy phòng — kiểm tra lại mã, hoặc người tạo phòng chưa mở/đã thoát.');setNet('🔌 Không tìm thấy phòng',!0);showRetry()}
+    else if(t==='network'||t==='server-error'||t==='socket-error'){mpMsg('❌ Mất kết nối tới máy chủ ghép phòng. Thử lại.');showRetry()}
+    else{mpMsg('❌ Lỗi: '+t)}
     setNet('🔌 Lỗi kết nối',!0);
   });
   return peer;
@@ -1992,7 +1993,9 @@ function startHosting(asRoom){
   document.getElementById('mp-mode-tag').textContent=roomMode?'👥 Phòng đông (tối đa 8 người)':'⚔️ Phòng 1v1';
   mpMsg('Đang mở phòng…');netRole='host';
   const p=ensurePeer(code);if(!p)return;
-  p.on('open',id=>{Me.id=id;mpMsg('✅ Phòng đã mở. Chờ người chơi…');setNet(roomMode?'🟡 Phòng đông đang chờ — mã '+code:'🟡 Đang chờ đối thủ — mã '+code,!0);renderLeaderboard()});
+  clearTimeout(joinTimer);
+  joinTimer=setTimeout(()=>{if(!peer||!peer.open){mpMsg('❌ Không mở được phòng (máy chủ ghép phòng bận). Thử lại sau vài giây.');setNet('🔌 Mở phòng thất bại',!0)}},12000);
+  p.on('open',id=>{clearTimeout(joinTimer);Me.id=id;mpMsg('✅ Phòng đã mở. Chờ người chơi…');setNet(roomMode?'🟡 Phòng đông đang chờ — mã '+code:'🟡 Đang chờ đối thủ — mã '+code,!0);renderLeaderboard()});
   p.on('connection',c=>{
     // reject if a 1v1 room already has its one guest
     if(!roomMode&&Object.keys(conns).length>=1){rawSend(c,{t:'full'});setTimeout(()=>c.close(),300);return}
@@ -2029,30 +2032,40 @@ document.getElementById('mp-code-input').addEventListener('input',e=>{
   e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
 });
 // join a room by code (manual entry or invite link). asRoom hint from the link.
-let joinTimer=null;
+let joinTimer=null, lastJoin=null;
+function showRetry(){const b=document.getElementById('mp-retry');if(b)b.style.display='block'}
+function hideRetry(){const b=document.getElementById('mp-retry');if(b)b.style.display='none'}
 function joinRoom(code,asRoom){
   code=(code||'').trim().toUpperCase();
   if(code.length<4){mpMsg('⚠️ Mã phòng không hợp lệ.');return}
+  lastJoin={code,asRoom};hideRetry();
   roomMode=!!asRoom;                    // provisional; host confirms via 'welcome'
-  mpMsg('Đang kết nối tới '+code+'… (có thể mất ~10s nếu khác mạng)');setNet('🟡 Đang kết nối…',!0);netRole='guest';
+  mpMsg('Đang kết nối tới '+code+'… (khác mạng có thể mất ~10s)');setNet('🟡 Đang kết nối…',!0);netRole='guest';
+  // tear down any half-open peer from a previous attempt so it doesn't hang
+  try{if(peer&&!peer.destroyed)peer.destroy()}catch(e){}
+  for(const k in conns)delete conns[k];hostId=null;
   const p=ensurePeer(null);if(!p)return;
   clearTimeout(joinTimer);
-  // if nothing connected within 20s, the two networks likely can't reach each other
+  // if nothing connected in time, the two networks likely can't reach each other
   joinTimer=setTimeout(()=>{
     if(!netConnected()){
-      mpMsg('❌ Không kết nối được. Thử lại, kiểm tra mã, hoặc dùng 4G nếu WiFi chặn P2P.');
-      setNet('🔌 Kết nối thất bại',!0);
+      mpMsg('❌ Không kết nối được. Kiểm tra mã & mạng, hoặc thử 4G. Bấm "Thử lại".');
+      setNet('🔌 Kết nối thất bại',!0);showRetry();
       try{p.destroy()}catch(e){}
     }
-  },20000);
+  },15000);
   p.on('open',id=>{
     Me.id=id;
     const c=p.connect(PEER_PREFIX+code,{reliable:!0,metadata:{name:Me.name}});
-    c.on('open',()=>clearTimeout(joinTimer));
+    c.on('open',()=>{clearTimeout(joinTimer);hideRetry()});
     c.on('data',d=>{ if(d&&d.t==='full'){clearTimeout(joinTimer);mpMsg('❌ Phòng đã đầy.');setNet('🔌 Phòng đầy',!0)} });
+    c.on('error',()=>{clearTimeout(joinTimer);mpMsg('❌ Lỗi kết nối tới phòng. Bấm "Thử lại".');showRetry()});
     wireConn(c,!1);
   });
 }
+document.getElementById('mp-retry').addEventListener('click',()=>{
+  if(lastJoin)joinRoom(lastJoin.code,lastJoin.asRoom);
+});
 document.getElementById('mp-join-go').addEventListener('click',()=>{
   joinRoom(document.getElementById('mp-code-input').value,roomMode);
 });
