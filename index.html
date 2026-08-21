@@ -2252,9 +2252,12 @@ const BOSS_RESPAWN=60;       // tái xuất sau khi bị hạ (1 phút)
 const BOSS_BITE_RANGE=3.6;   // tầm cắn
 const BOSS_SPEED=2.6;        // tốc độ đuổi
 const Boss={active:!1,grp:null,head:null,jaw:null,legL:null,legR:null,armL:null,armR:null,tail:[],eyeMats:[],
-  hp:0,hpMax:0,x:0,z:0,yaw:0,tx:0,tz:0,tyaw:0,timer:BOSS_FIRST,warned:!1,
+  hp:0,hpMax:0,x:0,z:0,yaw:0,tx:0,tz:0,tyaw:0,timer:BOSS_FIRST,spawnAt:0,warned:!1,
   attackCd:0,anim:0,animT:0,biteSeq:0,lastBiteSeq:0,bitDone:!1,walk:0,spawnFx:0};
 function bossAuthority(){return !netConnected()||netRole==='host'}
+// hẹn giờ boss xuất hiện dựa trên ĐỒNG HỒ THẬT (performance.now) — không bị
+// ảnh hưởng bởi rAF bị bóp khi tab chạy nền, nên đồng hồ luôn giảm đúng thực tế.
+function scheduleBoss(sec){Boss.spawnAt=performance.now()+sec*1000;Boss.timer=sec;Boss.warned=!1}
 function makeBossModel(){
   const g=new T.Group();
   const scale=1.0;
@@ -2400,7 +2403,7 @@ function bossDefeated(){
   if(!Boss.active)return;
   if(netConnected())broadcast({t:'bossDie',x:Boss.grp.position.x,z:Boss.grp.position.z});
   onBossDefeatedLocal(Boss.grp.position.x,Boss.grp.position.z);
-  Boss.timer=BOSS_RESPAWN;Boss.warned=!1;
+  scheduleBoss(BOSS_RESPAWN);                 // hẹn giờ tái xuất theo đồng hồ thật
 }
 // thưởng + hiệu ứng khi boss chết (chạy trên MỌI client)
 function onBossDefeatedLocal(x,z){
@@ -2437,9 +2440,10 @@ function bossBite(){
 function triggerBite(){Boss.anim=1;Boss.animT=0;Boss.bitDone=!1;Boss.biteSeq++;}
 // ---- cập nhật boss mỗi khung hình (AI cho authority + nội suy/animation cho mọi người) ----
 function updateBoss(dt,time){
-  // AUTHORITY: đếm giờ xuất hiện
+  // AUTHORITY: đếm giờ xuất hiện theo ĐỒNG HỒ THẬT (không lệ thuộc dt của rAF)
   if(bossAuthority()&&!Boss.active){
-    Boss.timer-=dt;
+    if(!Boss.spawnAt)scheduleBoss(BOSS_FIRST);            // khởi tạo lần đầu
+    Boss.timer=Math.max(0,(Boss.spawnAt-performance.now())/1000);
     if(!Boss.warned&&Boss.timer<=10){Boss.warned=!0;showFloat('⚠️ Khủng long sắp xuất hiện...','#ff9a44');feed('⚠️ Chuẩn bị! Khủng long sắp tới trong 10 giây.')}
     if(Boss.timer<=0)bossSpawn();
     // đồng bộ đồng hồ cho cả phòng ~mỗi giây
