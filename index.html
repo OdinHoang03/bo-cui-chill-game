@@ -2321,6 +2321,21 @@ bossBarWrap.innerHTML='<div style="font-weight:800;color:#ffdada;text-shadow:0 2
   '<div style="margin-top:3px;height:16px;border:2px solid #7a1010;border-radius:9px;background:#2a0606;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.5)"><div id="boss-hp-fill" style="height:100%;width:100%;background:linear-gradient(90deg,#ff5b3a,#b30d0d);transition:width .15s"></div></div>'+
   '<div id="boss-hp-txt" style="font-weight:700;color:#fff;text-shadow:0 1px 3px #000;font-size:11px;margin-top:1px"></div>';
 document.getElementById('ui').appendChild(bossBarWrap);
+// ---- đồng hồ đếm ngược tới lúc boss xuất hiện ----
+const bossTimerEl=document.createElement('div');
+bossTimerEl.id='boss-timer';
+bossTimerEl.style.cssText='position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:37;display:none;pointer-events:none;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,120,80,.4);border-radius:12px;padding:5px 14px;color:#ffdfce;font-weight:800;font-size:13px;text-shadow:0 1px 3px #000;white-space:nowrap';
+document.getElementById('ui').appendChild(bossTimerEl);
+function fmtTime(s){s=Math.max(0,Math.ceil(s));const m=Math.floor(s/60),ss=s%60;return m+':'+(ss<10?'0':'')+ss}
+function updateBossTimer(){
+  if(Boss.active){bossTimerEl.style.display='none';return}
+  if(Boss.timer==null||Boss.timer>BOSS_FIRST+1){bossTimerEl.style.display='none';return}
+  bossTimerEl.style.display='block';
+  const soon=Boss.timer<=10;
+  bossTimerEl.style.color=soon?'#ff7a5a':'#ffdfce';
+  bossTimerEl.style.borderColor=soon?'rgba(255,60,40,.8)':'rgba(255,120,80,.4)';
+  bossTimerEl.textContent=(soon?'⚠️ Khủng long tới sau ':'🦖 Khủng long xuất hiện sau ')+fmtTime(Boss.timer);
+}
 function updateBossBar(){
   if(!Boss.active){bossBarWrap.style.display='none';return}
   bossBarWrap.style.display='block';
@@ -2401,6 +2416,7 @@ function onBossDefeatedLocal(x,z){
 }
 // ---- AUTHORITY: phát trạng thái boss cho cả phòng ----
 let bossNetTick=0;
+let bossTimerNetTick=0;
 function broadcastBoss(){
   if(!netConnected()||!bossAuthority())return;
   broadcast({t:'boss',hp:Boss.hp,x:+Boss.grp.position.x.toFixed(2),z:+Boss.grp.position.z.toFixed(2),yaw:+Boss.yaw.toFixed(2),bite:Boss.biteSeq});
@@ -2426,8 +2442,10 @@ function updateBoss(dt,time){
     Boss.timer-=dt;
     if(!Boss.warned&&Boss.timer<=10){Boss.warned=!0;showFloat('⚠️ Khủng long sắp xuất hiện...','#ff9a44');feed('⚠️ Chuẩn bị! Khủng long sắp tới trong 10 giây.')}
     if(Boss.timer<=0)bossSpawn();
+    // đồng bộ đồng hồ cho cả phòng ~mỗi giây
+    if(netConnected()){bossTimerNetTick+=dt;if(bossTimerNetTick>1){bossTimerNetTick=0;broadcast({t:'bossTimer',timer:Math.max(0,Boss.timer)})}}
   }
-  if(!Boss.active){updateBossBar();return}
+  if(!Boss.active){updateBossBar();updateBossTimer();return}
   const g=Boss.grp;
   if(bossAuthority()){
     // chọn mục tiêu gần nhất
@@ -2474,7 +2492,7 @@ function updateBoss(dt,time){
   }
   // ánh sáng xuất hiện
   if(Boss.spawnFx>0){Boss.spawnFx=Math.max(0,Boss.spawnFx-dt*1.5);g.scale.setScalar(1.0*(1+ (1-Boss.spawnFx)*0)+ (0));}
-  updateBossBar();
+  updateBossBar();updateBossTimer();
 }
 // hiện số nổi tại một điểm 3D (dùng cho sát thương lên boss)
 const _sfv=new T.Vector3();
@@ -2801,7 +2819,11 @@ function applyMsg(d,fromId){
       Boss.tx=d.x;Boss.tz=d.z;Boss.tyaw=d.yaw;Boss.grp.position.set(d.x,0,d.z);Boss.grp.rotation.y=d.yaw;Boss.yaw=d.yaw;
       audio.roar();showFloat('🦖 KHỦNG LONG BẠO CHÚA XUẤT HIỆN!','#ff6a4a');
       feed('🦖 <b>Khủng long bạo chúa</b> đã xuất hiện — cùng nhau hạ nó!');
-      updateBossBar();break;
+      updateBossBar();updateBossTimer();break;
+    }
+    case 'bossTimer':{                       // host đồng bộ đồng hồ đếm ngược
+      if(bossAuthority())break;
+      Boss.timer=d.timer;updateBossTimer();break;
     }
     case 'boss':{                            // host đồng bộ trạng thái boss
       if(bossAuthority())break;
