@@ -31,6 +31,12 @@ canvas{display:block}
 #log-hp-fill{height:100%;width:100%;background:linear-gradient(90deg,#f6d365,#fda085);border-radius:3px;transition:width .2s}
 #pov-label{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.5);font-size:12px;background:rgba(0,0,0,.3);padding:4px 12px;border-radius:8px;backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.05);transition:opacity .5s}
 #pov-label.hidden{opacity:0}
+#charge-wrap{position:absolute;bottom:150px;left:50%;transform:translateX(-50%);width:240px;opacity:0;transition:opacity .12s}
+#charge-wrap.on{opacity:1}
+#charge-bar{width:100%;height:14px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+#charge-fill{height:100%;width:0%;background:linear-gradient(90deg,#7fe0a0,#f6d365,#fda085,#ff5a2b);border-radius:8px;transition:width .04s linear}
+#charge-label{text-align:center;color:#fff;font-size:12px;font-weight:700;margin-top:3px;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+#charge-wrap.full #charge-bar{box-shadow:0 0 16px rgba(255,110,40,.9);border-color:rgba(255,150,60,.9)}
 #credit{position:absolute;bottom:6px;left:10px;color:rgba(255,255,255,.4);font-size:11px;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.5)}
 @keyframes floatUp{0%{transform:translate(-50%,-50%) scale(.5);opacity:1}100%{transform:translate(-50%,-150%) scale(1.3);opacity:0}}
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
@@ -44,7 +50,8 @@ canvas{display:block}
 <div id="chop-feedback">💥</div>
 <div id="pov-label" class="hidden">🎥 Người thứ 3</div>
 <div id="target-label" style="position:absolute;bottom:145px;left:50%;transform:translateX(-50%);color:#7fe0a0;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none"></div>
-<div id="hint">🖱️ Click/Space: chặt • WASD: di chuyển • Kéo chuột: xoay • Q/1-8: đổi góc (3=góc nhìn thứ nhất)</div>
+<div id="charge-wrap"><div id="charge-bar"><div id="charge-fill"></div></div><div id="charge-label">TỤ LỰC</div></div>
+<div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • Kéo chuột: xoay • Q/1-8: đổi góc</div>
 <div id="bottom-bar"><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
 </div>
@@ -684,6 +691,10 @@ const LARM_IDLE=-0.5;
 let chopT=0, chopPhase=-1;   // -1 idle, 0 windup, 1 swing, 2 recover
 let hitFired=!1;
 let curChop=null;
+// ---- charge (tụ lực) ----
+let charging=!1, charge=0, chargeStored=0, chargeMul=1;
+const CHARGE_TIME=1.15;          // seconds to reach full charge
+const AXE_BASE_ROTX=-1.55;       // resting blade tilt
 // each style: up/down = arm.x windup/impact; rollUp/rollDn = arm.z (side swings);
 // twist = arm.y; yaw = body turn; lean = torso tilt; side = weight shift.
 const CHOP_STYLES=[
@@ -712,32 +723,67 @@ function startChop(){
   chopPhase=0;chopT=0;hitFired=!1;
   St.isChopping=!0;
   trailTip.length=0;trailTop.length=0;trailOpacity=0;
-  swingPower=(curChop.dmg>=2?1.6:1)*(1+Math.min(St.combo,8)*0.12); // combo makes fire fiercer
+  // charge amplifies both power and animation size
+  chargeMul=1+chargeStored*1.6;                    // 1x → 2.6x at full charge
+  swingPower=(curChop.dmg>=2?1.6:1)*(1+Math.min(St.combo,8)*0.12)*(0.7+chargeStored*1.1);
   audio.chop();
+}
+
+// ===== CHARGE (tụ lực): hold to build power, release to swing =====
+const chargeWrap=document.getElementById('charge-wrap');
+const chargeFill=document.getElementById('charge-fill');
+const chargeLabel=document.getElementById('charge-label');
+function beginCharge(){
+  if(!audio.ctx)audio.init();
+  if(!St.canChop||St.isChopping||charging)return;
+  charging=!0;charge=0;
+  chargeWrap.classList.add('on');
+  document.getElementById('hint').classList.add('hidden');
+}
+function releaseCharge(){
+  if(!charging)return;
+  charging=!1;
+  chargeWrap.classList.remove('on','full');
+  chargeStored=Math.min(1,charge/CHARGE_TIME);
+  St.canChop=!1;
+  startChop();
+}
+function updateCharge(dt){
+  if(!charging)return;
+  charge+=dt;
+  const p=Math.min(1,charge/CHARGE_TIME);
+  chargeFill.style.width=(p*100)+'%';
+  chargeLabel.textContent=p>=1?'⚡ CỰC MẠNH!':'TỤ LỰC '+Math.round(p*100)+'%';
+  chargeWrap.classList.toggle('full',p>=1);
+  // charged glow ramps the trail even before the swing
+  swingPower=0.4+p*1.4;trailOpacity=Math.max(trailOpacity,0.25+p*0.5);
 }
 
 function landHit(){
   const c=curChop||CHOP_STYLES[0];
+  const dmg=Math.max(1,Math.round(c.dmg*chargeMul));   // charge multiplies damage
+  const chg=chargeStored;
   audio.chop();
   St.chops++;
   const now=performance.now();
   if(now-St.lastChop<1600)St.combo++;else St.combo=1;
   St.lastChop=now;
   if(St.combo>St.maxCombo)St.maxCombo=St.combo;
-  const shakeMs=120+c.dmg*50;
+  const shakeMs=(120+dmg*45)*(1+chg*0.6);
   document.body.style.animation='shake '+(shakeMs/1000)+'s ease-out';setTimeout(()=>document.body.style.animation='',shakeMs);
   const fb=document.getElementById('chop-feedback');
+  const chgTag=chg>0.66?'⚡ ':'';
 
   if(chopTarget.type==='tree'){
     // ===== chopping a forest tree =====
     const tr=chopTarget.tree;
-    emitChipsAt(tr.x,1.0,tr.z,c.chips,1);
-    tr.hp-=c.dmg;
-    tr.grp.userData.wob=.4;
-    tr.shake=0.5+c.dmg*0.2;                        // canopy shudder
+    emitChipsAt(tr.x,1.0,tr.z,c.chips+Math.round(chg*20),1+chg);
+    tr.hp-=dmg;
+    tr.grp.userData.wob=.4+chg*.5;
+    tr.shake=0.5+dmg*0.15;                        // canopy shudder
     addTreeGash(tr);                               // leave a real gash/crack on the trunk
-    shedLeaves(tr.x,tr.cy+ (Math.random()-.3)*0.6,tr.z,tr.leafColor,4+c.dmg*3); // rụng lá
-    fb.textContent=tr.hp<=0?'🌲 ĐỔ CÂY!':'🪓 '+c.name;
+    shedLeaves(tr.x,tr.cy+ (Math.random()-.3)*0.6,tr.z,tr.leafColor,4+dmg*3); // rụng lá
+    fb.textContent=tr.hp<=0?'🌲 ĐỔ CÂY!':chgTag+'🪓 '+c.name;
     fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
     if(tr.hp<=0&&!tr.dead){
       tr.dead=!0;tr.fall=0.0001;
@@ -745,18 +791,18 @@ function landHit(){
       St.score+=15+Math.floor(St.combo*2);St.wood+=2;
       audio.split();emitChipsAt(tr.x,0.4,tr.z,30,1.6);
       shedLeaves(tr.x,tr.cy,tr.z,tr.leafColor,26);  // burst of leaves as it dies
-    }else{St.score+=c.dmg}
+    }else{St.score+=dmg}
     updateUI();return;
   }
 
   // ===== chopping the central log =====
-  emitChips(c.chips,1+ (c.dmg-1)*0.6);
-  St.logHP-=c.dmg;
+  emitChips(c.chips+Math.round(chg*22),1+ (dmg-1)*0.4+chg);
+  St.logHP-=dmg;
   if(St.logHP<0)St.logHP=0;
   const tip=axeTipWorld();
   applyChopVisual(tip.y);
-  if(logGrp){logGrp.userData.wob=.35+c.dmg*.12;logGrp.userData.wobDir=(c.side||0)!==0?Math.sign(-c.side):(Math.random()<.5?1:-1)}
-  fb.textContent=St.logHP<=0?'🪵 BỔ ĐÔI!':(c.dmg>=2?'💪 '+c.name:(St.combo>=3?'🔥 x'+St.combo:'🪓 '+c.name));
+  if(logGrp){logGrp.userData.wob=.35+dmg*.1+chg*.3;logGrp.userData.wobDir=(c.side||0)!==0?Math.sign(-c.side):(Math.random()<.5?1:-1)}
+  fb.textContent=St.logHP<=0?'🪵 BỔ ĐÔI!':(chg>0.66?'⚡ CHÍ MẠNG!':(dmg>=2?'💪 '+c.name:(St.combo>=3?'🔥 x'+St.combo:'🪓 '+c.name)));
   fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
   if(St.logHP<=0){
     St.score+=10+Math.floor(St.combo*2);
@@ -765,14 +811,31 @@ function landHit(){
     emitChips(42,2.3);
     splitLog();
   }else{
-    St.score+=c.dmg;
+    St.score+=dmg;
   }
   updateUI();
 }
 
 function updateChop(dt){
+  // ---- CHARGING pose: arm cocks back further, axe grows & tilts blade DOWN ----
+  if(charging){
+    const p=Math.min(1,charge/CHARGE_TIME);
+    const e=easeOut(p);
+    // arm pulls back overhead more the longer you hold
+    rArm.rotation.x=ARM_IDLE+(-2.6-ARM_IDLE)*e;
+    rArm.rotation.z=Math.sin(performance.now()*.02)*0.05*p; // tense tremor
+    lArm.rotation.x=LARM_IDLE+(-0.9-LARM_IDLE)*e;lArm.rotation.z=-0.2;
+    guy.rotation.y=GUY_YAW;
+    guy.rotation.z=-0.18*e;                        // lean back to load the swing
+    // AXE grows bigger and its blade rotates to point DOWNWARD as charge builds
+    const sc2=1+p*0.7;                             // up to 1.7x size
+    axe.scale.setScalar(sc2);
+    axe.rotation.x=AXE_BASE_ROTX-p*0.6;            // blade tips further down/forward
+    return;
+  }
   if(chopPhase<0){
     // idle sway — arm relaxed holding axe, whole body faces the log
+    axe.scale.setScalar(1);axe.rotation.x=AXE_BASE_ROTX;
     const s=Math.sin(performance.now()*.0015);
     rArm.rotation.x=ARM_IDLE+s*.06; rArm.rotation.y=0; rArm.rotation.z=0;
     lArm.rotation.x=LARM_IDLE+s*.04; lArm.rotation.z=-0.35;
@@ -781,24 +844,28 @@ function updateChop(dt){
     return;
   }
   const c=curChop||CHOP_STYLES[0];
+  // charged swings keep the axe enlarged, shrinking back over the recover phase
+  const mul=chargeMul;
   chopT+=dt;
   if(chopPhase===0){ // windup
     const p=Math.min(chopT/c.wind,1);const e=easeOut(p);
-    rArm.rotation.x=ARM_IDLE+(c.up-ARM_IDLE)*e;
+    rArm.rotation.x=ARM_IDLE+(c.up-ARM_IDLE)*e*Math.min(1.25,0.9+chargeStored*0.5);
     rArm.rotation.z=(c.rollUp||0)*e;
     rArm.rotation.y=(c.twist||0)*0.6*e;
     guy.rotation.y=GUY_YAW+(c.yaw||0)*e;
-    guy.rotation.z=-c.lean*0.7*p + (c.side*0.4)*p;
+    guy.rotation.z=(-c.lean*0.7*p + (c.side*0.4)*p)*(1+chargeStored*0.4);
     if(c.twoHand){lArm.rotation.x=LARM_IDLE+(c.up*0.4-LARM_IDLE)*e;lArm.rotation.z=-0.15}
+    axe.scale.setScalar(1+chargeStored*0.7);axe.rotation.x=AXE_BASE_ROTX-chargeStored*0.5;
     if(p>=1){chopPhase=1;chopT=0}
   }else if(chopPhase===1){ // swing to impact (fast)
-    const p=Math.min(chopT/c.swing,1);const e=easeIn(p);
+    const p=Math.min(chopT/(c.swing*(1-chargeStored*0.15)),1);const e=easeIn(p);
     rArm.rotation.x=c.up+(c.down-c.up)*e;
     rArm.rotation.z=(c.rollUp||0)+(((c.rollDn||0)-(c.rollUp||0)))*e;
     rArm.rotation.y=(c.twist||0)*0.6*(1-e) - (c.twist||0)*0.4*e;
     guy.rotation.y=GUY_YAW+(c.yaw||0)*(1-e*0.4);
-    guy.rotation.z=(-c.lean*0.7 + c.side*0.4)+(c.lean*0.9)*e;
+    guy.rotation.z=((-c.lean*0.7 + c.side*0.4)+(c.lean*0.9)*e)*(1+chargeStored*0.4);
     if(c.twoHand){lArm.rotation.x=(c.up*0.4)+((-0.5)-(c.up*0.4))*e;lArm.rotation.z=-0.15+(-0.2)*e}
+    axe.scale.setScalar(1+chargeStored*0.7);axe.rotation.x=AXE_BASE_ROTX-chargeStored*0.5*(1-e);
     trailOpacity=1;
     if(p>=1&&!hitFired){hitFired=!0;landHit();chopPhase=2;chopT=0}
   }else if(chopPhase===2){ // recover to idle facing log
@@ -809,8 +876,9 @@ function updateChop(dt){
     guy.rotation.y=GUY_YAW+(c.yaw||0)*0.6*(1-e);
     guy.rotation.z=(c.lean*0.2+c.side*0.1)*(1-e);
     if(c.twoHand){lArm.rotation.x=LARM_IDLE;lArm.rotation.z=-0.35}
+    axe.scale.setScalar(1+chargeStored*0.7*(1-e));axe.rotation.x=AXE_BASE_ROTX;
     trailOpacity*=.82;
-    if(p>=1){chopPhase=-1;St.isChopping=!1;St.canChop=!0}
+    if(p>=1){chopPhase=-1;St.isChopping=!1;St.canChop=!0;chargeStored=0;chargeMul=1}
   }
 }
 function easeIn(t){return t*t*t}
@@ -906,26 +974,41 @@ addEventListener('pointerup',()=>{dragging=!1});
 addEventListener('wheel',e=>{if(povMode===7){orbitDist=Math.max(4,Math.min(16,orbitDist+Math.sign(e.deltaY)*0.6))}},{passive:!0});
 
 // ============== INPUT ==============
+// Hold (mouse button or Space) to charge, release to swing. A quick tap still
+// fires a light chop.
 function tryChop(){
   if(!audio.ctx)audio.init();
   if(!St.canChop||St.isChopping)return;
   const now=performance.now();
-  if(now-(tryChop._last||0)<220)return;
+  if(now-(tryChop._last||0)<180)return;
   tryChop._last=now;
-  St.canChop=!1;
-  startChop();
+  chargeStored=0;St.canChop=!1;startChop();
   document.getElementById('hint').classList.add('hidden');
 }
-// click chops ONLY if the pointer didn't drag (dragging rotates the camera)
-addEventListener('click',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn'))return;if(dragMoved>6)return;tryChop()});
+// pointer: press to charge (only if not dragging camera), release to swing
+let holdFromPointer=!1;
+addEventListener('pointerdown',e=>{
+  if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn'))return;
+  holdFromPointer=!0;
+  // begin charging after we know it's not a drag — start immediately, cancel on drag
+  beginCharge();
+});
+addEventListener('pointerup',e=>{
+  if(!holdFromPointer)return;holdFromPointer=!1;
+  if(dragMoved>6){charging=!1;chargeWrap.classList.remove('on','full');return} // was a camera drag
+  if(charging)releaseCharge();else if(St.canChop&&!St.isChopping)tryChop();
+});
 addEventListener('keydown',e=>{
-  if(e.code==='Space'||e.key==='Enter'){e.preventDefault();tryChop()}
+  if(e.code==='Space'||e.key==='Enter'){e.preventDefault();if(!e.repeat)beginCharge()}
   else if(e.key==='q'||e.key==='Q'){cyclePOV()}
   else if(e.key>='1'&&e.key<='8'){povMode=(+e.key)-1;showPovLabel()}
   else if(e.key==='ArrowLeft'){povMode=7;orbitYaw+=0.15;showPovLabel()}
   else if(e.key==='ArrowRight'){povMode=7;orbitYaw-=0.15;showPovLabel()}
   else if(e.key==='ArrowUp'){povMode=7;orbitPitch=Math.min(1.52,orbitPitch+0.12);showPovLabel()}
   else if(e.key==='ArrowDown'){povMode=7;orbitPitch=Math.max(0.06,orbitPitch-0.12);showPovLabel()}
+});
+addEventListener('keyup',e=>{
+  if(e.code==='Space'||e.key==='Enter'){e.preventDefault();if(charging)releaseCharge()}
 });
 addEventListener('touchstart',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn'))return;},{passive:!0});
 
@@ -1009,6 +1092,7 @@ function loop(){
   head.position.y=1.12+Math.sin(time*.9)*.006;
 
   updatePlayer(dt,time);
+  updateCharge(dt);
   updateChop(dt);
 
   // ===== DRAGON-FIRE axe trail (wide additive ribbon) =====
