@@ -344,7 +344,7 @@ const WEAPONS=[
     trail:0x66ffcc, chipColor:0xbafff0, styles:[3,4,5], viewScale:1.05, flip:!0,
     desc:'Nhanh nhẹn, tầm với xa.', skill:{id:'dash', name:'Lao Vút', icon:'💨', cd:9, dur:0, help:'Lao thẳng về phía trước, chém trúng mọi kẻ trên đường.'}},
   {id:'dual',  icon:'🗡️', name:'Song Đao',       tint:0xff66aa, model:'sword_and_dagger.glb', dmgMul:0.7, reachMul:0.95,speedMul:1.4, chargeMul:0.6,
-    trail:0xff66aa, chipColor:0xffc0e0, styles:[2,3,4], viewScale:0.95, flip:!0,
+    trail:0xff66aa, chipColor:0xffc0e0, styles:[2,3,4], viewScale:0.95, flip:!0, twoHand:!0,
     desc:'Đánh cực nhanh, sát thương thấp.', skill:{id:'flurry', name:'Liên Trảm', icon:'🌪️', cd:10, dur:1.6, help:'Chém liên hoàn cực nhanh vào kẻ địch gần nhất.'}},
   {id:'spear', icon:'🔱', name:'Thương Xuyên Kích',tint:0xffe066,model:'spear.glb',dmgMul:1.1, reachMul:1.5, speedMul:0.95,chargeMul:1.0,
     trail:0xffe066, chipColor:0xfff0a0, styles:[6,0], viewScale:1.15,
@@ -1088,6 +1088,10 @@ function setRemoteWeapon(p,wid){
       model.position.set(0,-.36,.04);model.rotation.set(-1.55,0,0);
       arm.add(model);p.av._wmodel=model;
       if(p.av.axe)p.av.axe.visible=!1;        // hide the crude stand-in axe
+      // vũ khí hai tay: gắn đao thứ 2 vào tay trái đối thủ
+      if(p.av._lwmodel){p.av.laxe.remove(p.av._lwmodel);p.av._lwmodel=null}
+      if(w.twoHand){const m2=proto.clone(!0);p.av.laxe.add(m2);p.av._lwmodel=m2;p.av.laxe.visible=!0}
+      else{p.av.laxe.visible=!1}
     }else{
       // no model → tint the stand-in axe to at least show the weapon colour
       if(p.av.axe){p.av.axe.visible=!0;p.av.axe.traverse(o=>{if(o.isMesh&&o.material){o.material.color=new T.Color(w.tint);o.material.emissive=new T.Color(w.tint);o.material.needsUpdate=!0}})}
@@ -1099,6 +1103,28 @@ function setRemoteWeapon(p,wid){
 axe.position.set(0,-.36,.04);
 axe.rotation.set(-1.55,0,0);
 rArm.add(axe);
+
+// ---- LEFT-hand weapon holder (chỉ dùng cho vũ khí cầm hai tay, vd Song Đao) ----
+const rHandL=new T.Mesh(new T.SphereGeometry(.07,8,8),skin);rHandL.position.y=-.37;lArm.add(rHandL);
+const laxe=new T.Group();laxe.position.set(0,-.36,.04);laxe.rotation.set(-1.55,0,0);laxe.scale.x=-1;laxe.visible=!1;lArm.add(laxe);
+let laxeModel=null;                    // model đang cầm ở tay trái
+// tải + hiện model vũ khí thứ hai vào tay trái (mirror) khi twoHand; ẩn nếu không
+function setLeftWeapon(w){
+  if(laxeModel){laxe.remove(laxeModel);laxeModel=null}
+  if(!w||!w.twoHand){laxe.visible=!1;return}
+  laxe.visible=!0;
+  requestWeaponProto(w,proto=>{
+    if(curWeapon.id!==w.id||!w.twoHand)return;
+    if(laxeModel){laxe.remove(laxeModel);laxeModel=null}
+    if(proto){laxeModel=proto.clone(!0);laxe.add(laxeModel)}
+  });
+}
+// đồng bộ tay trái theo tay phải để tạo dáng cầm hai tay (dual-wield)
+function syncLeftArm(){
+  lArm.rotation.x=rArm.rotation.x;
+  lArm.rotation.y=-rArm.rotation.y;
+  lArm.rotation.z=-0.35-rArm.rotation.z*0.6;
+}
 
 rArm.position.set(.32,.86,.05);
 guy.add(rArm);
@@ -1161,6 +1187,7 @@ function makeRemoteGuy(){
   // arms — the right one swings so you can read their attacks
   const la=new T.Group();const lum=new T.Mesh(new T.CylinderGeometry(.06,.07,.34,8),rSkin);lum.position.y=-.17;la.add(lum);
   la.position.set(-.32,.86,.05);la.rotation.set(-.5,0,-.35);g.add(la);
+  const laxeR=new T.Group();laxeR.position.set(0,-.36,.04);laxeR.rotation.set(-1.55,0,0);laxeR.scale.x=-1;laxeR.visible=!1;la.add(laxeR); // đao thứ 2 (hai tay)
   const ra=new T.Group();const rum=new T.Mesh(new T.CylinderGeometry(.065,.075,.36,8),rSkin);rum.position.y=-.18;ra.add(rum);
   // simple stand-in axe for the remote player
   const rax=new T.Group();
@@ -1177,7 +1204,7 @@ function makeRemoteGuy(){
   const hpFg=new T.Sprite(new T.SpriteMaterial({color:0xff5544,transparent:!0,depthTest:!1}));
   hpFg.scale.set(1.16,.09,1);hpFg.position.y=1.62;g.add(hpFg);
   g.visible=!1;
-  const handle={grp:g,rArm:ra,axe:rax,nameSpr,hpFg,head:h,shirtMat:rShirt,hatMat:rHat,
+  const handle={grp:g,rArm:ra,lArm:la,axe:rax,laxe:laxeR,nameSpr,hpFg,head:h,shirtMat:rShirt,hatMat:rHat,
     setColor(hex){rShirt.color.setHex(hex);rHat.color.setHex((hex&0xfefefe)>>1)},
     setLabel(txt){nameSpr.material.map=makeLabelTex(txt);nameSpr.material.needsUpdate=!0}};
   return handle;
@@ -2320,6 +2347,7 @@ function equipWeapon(id){
   const w=WEAPONS.find(x=>x.id===id);if(!w)return;
   Object.assign(curWeapon,w);
   loadWeaponModel(w);                 // tải/hiện đúng model glb của vũ khí (có cache + fallback)
+  setLeftWeapon(w);                   // vũ khí hai tay: hiện đao thứ hai ở tay trái, ẩn nếu không
   _trailTint.setHex(w.trail||0xff5a1e);          // vệt chém đổi màu theo vũ khí
   if(typeof chips!=='undefined'&&chips.material)chips.material.color.setHex(w.chipColor||0xD9AE64); // tia lửa/mảnh vụn đổi màu
   skillActive=null;guy.rotation.z=0;
@@ -2829,6 +2857,9 @@ function updateRemote(dt){
     const dy=((st.yaw-g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
     g.rotation.y+=dy*Math.min(1,dt*10);
     p.av.rArm.rotation.x+=(st.armX-p.av.rArm.rotation.x)*Math.min(1,dt*14);
+    if(p.av.laxe&&p.av.laxe.visible){        // vũ khí hai tay: tay trái đối thủ đồng bộ theo tay phải
+      p.av.lArm.rotation.x=p.av.rArm.rotation.x;p.av.lArm.rotation.z=-0.35;
+    }
     const hpp=Math.max(0,Math.min(1,st.hp/(st.hpMax||100)));
     p.av.hpFg.scale.x=1.16*hpp;
     p.av.hpFg.material.color.setHex(hpp<0.35?0xff3333:0xff7744);
@@ -2936,6 +2967,7 @@ function loop(){
   updateBuffs(dt);
   updateBubbles(dt);
   updateSkills(dt);
+  if(curWeapon.twoHand)syncLeftArm();       // Song Đao: tay trái cầm đao thứ hai theo tay phải
 
   // ===== DRAGON-FIRE axe trail (wide additive ribbon) =====
   if(trailOpacity>.02){
