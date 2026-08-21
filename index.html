@@ -118,14 +118,18 @@ canvas{display:block}
   <div id="mp-hosting" style="display:none">
     <div class="sub">Gửi mã này cho bạn của bạn:</div>
     <div class="code" id="mp-code">····</div>
+    <button class="btn alt" id="mp-copy">📋 Copy mã</button>
     <div class="note">Đang chờ đối thủ kết nối… Giữ tab này mở.</div>
   </div>
   <div id="mp-joining" style="display:none">
-    <input id="mp-code-input" placeholder="Nhập mã phòng (VD: ABC123)" maxlength="12" autocomplete="off">
+    <div class="sub">Dán/nhập mã phòng mà người tạo phòng gửi cho bạn:</div>
+    <input id="mp-code-input" placeholder="VD: ABC123" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <button class="btn" id="mp-join-go">🚪 Vào phòng</button>
+    <button class="btn alt" id="mp-back">← Quay lại</button>
   </div>
   <div id="mp-msg" class="note" style="margin-top:8px"></div>
-  <div class="note" style="margin-top:10px">⚠️ Dùng broker công khai miễn phí của PeerJS. Nếu mạng có NAT/firewall chặt, kết nối có thể thất bại — thử lại hoặc đổi mạng.</div>
+  <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → hiện mã 6 ký tự.<br>2. Gửi mã đó cho người kia (Zalo/Messenger…).<br>3. Người kia bấm <b>Nhập mã để vào phòng</b>, điền mã, bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ áo đỏ — lại gần và vung rìu để đánh nhau!</div>
+  <div class="note" style="margin-top:8px">⚠️ Dùng broker công khai miễn phí của PeerJS. Nếu mạng có NAT/firewall chặt, kết nối có thể thất bại — thử lại hoặc đổi mạng.</div>
 </div>
 <div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
@@ -900,7 +904,7 @@ const Rem={x:2.5,z:-2,yaw:0,hp:100,hpMax:100,connected:!1,name:'Đối thủ',ar
 // player movement state
 const player={vx:0,vz:0};
 const keys={};
-addEventListener('keydown',e=>{const k=e.key.toLowerCase();if('wasd'.includes(k)){keys[k]=1;e.preventDefault()}});
+addEventListener('keydown',e=>{const a=document.activeElement;if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.isContentEditable))return;const k=e.key.toLowerCase();if('wasd'.includes(k)){keys[k]=1;e.preventDefault()}});
 addEventListener('keyup',e=>{const k=e.key.toLowerCase();if('wasd'.includes(k))keys[k]=0});
 let chopTarget={type:'log'};   // {type:'log'} or {type:'tree',tree}
 
@@ -1296,10 +1300,17 @@ function tryChop(){
   chargeStored=0;St.canChop=!1;startChop();
   document.getElementById('hint').classList.add('hidden');
 }
+// true when the user is typing into a text field / has a panel open
+function typingInField(){
+  const a=document.activeElement;
+  return !!(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.isContentEditable));
+}
+function panelOpen(){return document.querySelector('.panel.on')!==null}
 // pointer: press to charge (only if not dragging camera), release to swing
 let holdFromPointer=!1;
 addEventListener('pointerdown',e=>{
-  if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn')||e.target.closest('#chop-btn'))return;
+  // never start a swing when clicking UI (buttons, panels, inputs)
+  if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn')||e.target.closest('#chop-btn')||e.target.closest('.panel')||e.target.closest('#ui'))return;
   holdFromPointer=!0;
   // begin charging after we know it's not a drag — start immediately, cancel on drag
   beginCharge();
@@ -1310,6 +1321,11 @@ addEventListener('pointerup',e=>{
   if(charging)releaseCharge();else if(St.canChop&&!St.isChopping)tryChop();
 });
 addEventListener('keydown',e=>{
+  if(typingInField()){                       // let the user type the room code
+    if(e.key==='Enter')document.getElementById('mp-join-go').click();
+    return;
+  }
+  if(e.key==='Escape'){document.querySelectorAll('.panel.on').forEach(p=>p.classList.remove('on'));return}
   if(e.code==='Space'||e.key==='Enter'){e.preventDefault();if(!e.repeat)beginCharge()}
   else if(e.key==='f'||e.key==='F'){if(!e.repeat)tryChop()} // F = quick chop, no charge (A is used for strafing)
   else if(e.key==='u'||e.key==='U'){if(!e.repeat)toggleUpg()} // U = upgrade shop
@@ -1563,6 +1579,22 @@ document.getElementById('mp-host').addEventListener('click',()=>{
 document.getElementById('mp-join-show').addEventListener('click',()=>{
   document.getElementById('mp-idle').style.display='none';
   document.getElementById('mp-joining').style.display='block';
+  const inp=document.getElementById('mp-code-input');
+  inp.value='';inp.focus();                      // cursor lands in the box right away
+});
+document.getElementById('mp-back').addEventListener('click',()=>{
+  document.getElementById('mp-joining').style.display='none';
+  document.getElementById('mp-idle').style.display='block';
+  mpMsg('');
+});
+document.getElementById('mp-copy').addEventListener('click',async()=>{
+  const code=document.getElementById('mp-code').textContent;
+  try{await navigator.clipboard.writeText(code);mpMsg('📋 Đã copy mã: '+code)}
+  catch(e){mpMsg('⚠️ Không copy được — hãy chọn và copy mã thủ công.')}
+});
+// typing the code: force uppercase, Enter submits
+document.getElementById('mp-code-input').addEventListener('input',e=>{
+  e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
 });
 document.getElementById('mp-join-go').addEventListener('click',()=>{
   const code=(document.getElementById('mp-code-input').value||'').trim().toUpperCase();
