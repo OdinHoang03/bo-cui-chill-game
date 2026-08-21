@@ -52,6 +52,13 @@ canvas{display:block}
 #upg-btn,#mp-btn{background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 16px;color:#fff;font-size:14px;cursor:pointer;transition:all .2s}
 #upg-btn:hover,#mp-btn:hover{background:rgba(255,255,255,.15);transform:scale(1.05)}
 .panel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(.94);width:min(92vw,460px);max-height:78vh;overflow-y:auto;background:rgba(16,24,18,.93);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:18px 20px;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:30}
+/* A closed panel must be completely inert. `#ui>*{pointer-events:auto}` is an
+   ID selector and would otherwise OUTRANK `.panel{pointer-events:none}`, leaving
+   every invisible panel hit-testable — the last one in the DOM then swallowed
+   clicks meant for the panel actually on screen. These id+class rules win, and
+   visibility:hidden removes closed panels from hit-testing outright. */
+#ui>.panel{pointer-events:none;visibility:hidden}
+#ui>.panel.on{pointer-events:auto;visibility:visible;z-index:40}
 .panel.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
 .panel h2{font-size:19px;margin-bottom:4px}
 .panel .sub{opacity:.7;font-size:12px;margin-bottom:12px}
@@ -1334,12 +1341,13 @@ addEventListener('pointerup',e=>{
 addEventListener('keydown',e=>{
   if(typingInField()){                       // let the user type names / room codes
     if(e.key==='Enter'){
-      if(document.activeElement.id==='name-input')document.getElementById('name-save').click();
+      if(document.activeElement.id==='name-input')saveName();
       else document.getElementById('mp-join-go').click();
     }
+    if(e.key==='Escape')closeAllPanels();
     return;
   }
-  if(e.key==='Escape'){document.querySelectorAll('.panel.on').forEach(p=>p.classList.remove('on'));return}
+  if(e.key==='Escape'){closeAllPanels();return}
   if(e.code==='Space'||e.key==='Enter'){e.preventDefault();if(!e.repeat)beginCharge()}
   else if(e.key==='f'||e.key==='F'){if(!e.repeat)tryChop()} // F = quick chop, no charge (A is used for strafing)
   else if(e.key==='u'||e.key==='U'){if(!e.repeat)toggleUpg()} // U = upgrade shop
@@ -1420,7 +1428,14 @@ function buyUpgrade(u){
   fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
   saveProgress();updateUI();renderUpgrades();netSend({t:'stats'});
 }
-function toggleUpg(){const on=upgPanel.classList.toggle('on');if(on)renderUpgrades()}
+// only one panel visible at a time
+function closeAllPanels(){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'))}
+function openPanel(el){closeAllPanels();el.classList.add('on')}
+function toggleUpg(){
+  const wasOn=upgPanel.classList.contains('on');
+  closeAllPanels();
+  if(!wasOn){upgPanel.classList.add('on');renderUpgrades()}
+}
 document.getElementById('upg-btn').addEventListener('click',toggleUpg);
 
 // ---------- player name ----------
@@ -1437,16 +1452,17 @@ function openNamePanel(){
   const inp=document.getElementById('name-input');
   inp.value=Me.name==='Bạn'?'':Me.name;
   document.getElementById('name-msg').textContent='';
-  namePanel.classList.add('on');
-  inp.focus();inp.select();
+  openPanel(namePanel);
+  setTimeout(()=>{inp.focus();inp.select()},60);   // focus after the open transition
 }
-document.getElementById('name-btn').addEventListener('click',openNamePanel);
-document.getElementById('me-name').addEventListener('click',openNamePanel);
-document.getElementById('name-save').addEventListener('click',()=>{
+function saveName(){
   applyName(document.getElementById('name-input').value);
   document.getElementById('name-msg').textContent='✅ Đã lưu tên: '+Me.name;
   setTimeout(()=>namePanel.classList.remove('on'),700);
-});
+}
+document.getElementById('name-btn').addEventListener('click',openNamePanel);
+document.getElementById('me-name').addEventListener('click',openNamePanel);
+document.getElementById('name-save').addEventListener('click',saveName);
 
 // ---------- save / load progression ----------
 function saveProgress(){
@@ -1609,7 +1625,11 @@ function onNetData(d){
       break;
   }
 }
-document.getElementById('mp-btn').addEventListener('click',()=>mpPanel.classList.toggle('on'));
+document.getElementById('mp-btn').addEventListener('click',()=>{
+  const wasOn=mpPanel.classList.contains('on');
+  closeAllPanels();
+  if(!wasOn)mpPanel.classList.add('on');
+});
 document.getElementById('mp-host').addEventListener('click',()=>{
   const code=roomCode();
   document.getElementById('mp-idle').style.display='none';
