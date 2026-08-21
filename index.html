@@ -52,7 +52,7 @@ canvas{display:block}
 <div id="target-label" style="position:absolute;bottom:145px;left:50%;transform:translateX(-50%);color:#7fe0a0;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none"></div>
 <div id="charge-wrap"><div id="charge-bar"><div id="charge-fill"></div></div><div id="charge-label">TỤ LỰC</div></div>
 <div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • Kéo chuột: xoay • Q/1-8: đổi góc</div>
-<div id="bottom-bar"><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
+<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
 </div>
 <script type="importmap">
@@ -1072,7 +1072,7 @@ function tryChop(){
 // pointer: press to charge (only if not dragging camera), release to swing
 let holdFromPointer=!1;
 addEventListener('pointerdown',e=>{
-  if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn'))return;
+  if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn')||e.target.closest('#chop-btn'))return;
   holdFromPointer=!0;
   // begin charging after we know it's not a drag — start immediately, cancel on drag
   beginCharge();
@@ -1084,6 +1084,7 @@ addEventListener('pointerup',e=>{
 });
 addEventListener('keydown',e=>{
   if(e.code==='Space'||e.key==='Enter'){e.preventDefault();if(!e.repeat)beginCharge()}
+  else if(e.key==='f'||e.key==='F'){if(!e.repeat)tryChop()} // F = quick chop, no charge (A is used for strafing)
   else if(e.key==='q'||e.key==='Q'){cyclePOV()}
   else if(e.key>='1'&&e.key<='8'){povMode=(+e.key)-1;showPovLabel()}
   else if(e.key==='ArrowLeft'){povMode=7;orbitYaw+=0.15;showPovLabel()}
@@ -1096,6 +1097,8 @@ addEventListener('keyup',e=>{
 });
 addEventListener('touchstart',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn'))return;},{passive:!0});
 
+// "Bổ ngay" button → instant chop with no charge
+document.getElementById('chop-btn').addEventListener('click',()=>tryChop());
 document.getElementById('pov-btn').addEventListener('click',cyclePOV);
 document.getElementById('music-btn').addEventListener('click',()=>{const on=audio.toggle();const b=document.getElementById('music-btn');b.classList.toggle('off',!on);b.textContent=on?'🎵':'🔇'});
 
