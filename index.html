@@ -332,15 +332,15 @@ function dropChance(){return 0.16+Up.luck*0.06}                             // x
 // biệt kích hoạt bằng phím E (hoặc nút 💥), có hồi chiêu riêng. Kỹ năng gây sát
 // thương diện rộng lên đối thủ dùng lại kênh mạng 'hit' như đòn thường.
 const WEAPONS=[
-  {id:'axe',   icon:'🪓', name:'Rìu Nham Thạch', tint:0xff5a1e, dmgMul:1.0, reachMul:1.0, speedMul:1.0, chargeMul:1.0,
+  {id:'axe',   icon:'🪓', name:'Rìu Nham Thạch', tint:0xff5a1e, model:'lava_axe.glb', dmgMul:1.0, reachMul:1.0, speedMul:1.0, chargeMul:1.0,
     desc:'Cân bằng, tụ lực mạnh.', skill:{id:'whirlwind', name:'Xoay Cuồng Phong', icon:'🌀', cd:12, dur:2.6, help:'Xoay tít gây sát thương diện rộng liên tục quanh bạn.'}},
-  {id:'hammer',icon:'🔨', name:'Búa Chấn Địa',   tint:0x8899ff, dmgMul:1.6, reachMul:0.9, speedMul:0.82,chargeMul:1.35,
+  {id:'hammer',icon:'🔨', name:'Búa Chấn Địa',   tint:0x8899ff, model:'weapons/hammer.glb', dmgMul:1.6, reachMul:0.9, speedMul:0.82,chargeMul:1.35,
     desc:'Sát thương cực cao nhưng chậm.', skill:{id:'quake', name:'Chấn Địa', icon:'💥', cd:14, dur:0, help:'Nện đất gây sát thương lớn + hất văng mọi đối thủ xung quanh.'}},
-  {id:'sword', icon:'⚔️', name:'Kiếm Gió',       tint:0x66ffcc, dmgMul:0.85,reachMul:1.15,speedMul:1.25,chargeMul:0.7,
+  {id:'sword', icon:'⚔️', name:'Kiếm Gió',       tint:0x66ffcc, model:'weapons/sword.glb', dmgMul:0.85,reachMul:1.15,speedMul:1.25,chargeMul:0.7,
     desc:'Nhanh nhẹn, tầm với xa.', skill:{id:'dash', name:'Lao Vút', icon:'💨', cd:9, dur:0, help:'Lao thẳng về phía trước, chém trúng mọi kẻ trên đường.'}},
-  {id:'dual',  icon:'🗡️', name:'Song Đao',       tint:0xff66aa, dmgMul:0.7, reachMul:0.95,speedMul:1.4, chargeMul:0.6,
+  {id:'dual',  icon:'🗡️', name:'Song Đao',       tint:0xff66aa, model:'weapons/dual.glb', dmgMul:0.7, reachMul:0.95,speedMul:1.4, chargeMul:0.6,
     desc:'Đánh cực nhanh, sát thương thấp.', skill:{id:'flurry', name:'Liên Trảm', icon:'🌪️', cd:10, dur:1.6, help:'Chém liên hoàn cực nhanh vào kẻ địch gần nhất.'}},
-  {id:'spear', icon:'🔱', name:'Thương Xuyên Kích',tint:0xffe066,dmgMul:1.1, reachMul:1.5, speedMul:0.95,chargeMul:1.0,
+  {id:'spear', icon:'🔱', name:'Thương Xuyên Kích',tint:0xffe066,model:'weapons/spear.glb',dmgMul:1.1, reachMul:1.5, speedMul:0.95,chargeMul:1.0,
     desc:'Tầm với rất xa.', skill:{id:'pierce', name:'Xuyên Kích', icon:'➹', cd:8, dur:0, help:'Đâm xuyên một đường dài, trúng mọi kẻ thẳng phía trước.'}},
 ];
 const curWeapon={...WEAPONS[0]};        // vũ khí đang dùng (bản sao để truy chỉ số nhanh)
@@ -930,13 +930,14 @@ axe.add(axeFallback);
 // (innermost applies first: align long axis → flip head down → yaw edge forward)
 const AXE_TARGET_LEN=1.05;
 let AXE_EXTRA_YAW=0;          // set to Math.PI if the edge ends up facing backwards
-new GLTFLoader().load('lava_axe.glb',gltf=>{
-  const model=gltf.scene;
+// Build an auto-oriented, auto-scaled holder for ANY weapon glb, tinted by `emis`.
+// Reused for every weapon model so you can drop in Sketchfab .glb files and they
+// all seat correctly in the hand. Returns the holder group (already sized).
+function buildWeaponHolder(model,emis){
   const gAlign=new T.Group();gAlign.add(model);
   const gFlip=new T.Group();gFlip.add(gAlign);
   const gYaw=new T.Group();gYaw.add(gFlip);
   const holder=new T.Group();holder.add(gYaw);
-  // holder stays DETACHED while measuring, so "world space" == holder space
   const refresh=()=>holder.updateMatrixWorld(!0);
   const bbox=()=>{refresh();return new T.Box3().setFromObject(model)};
 
@@ -994,19 +995,58 @@ new GLTFLoader().load('lava_axe.glb',gltf=>{
   box=bbox();
   holder.position.y-=box.max.y;
 
-  // 6) glowing lava emissive
+  // 6) glowing emissive in the weapon's colour
+  const col=new T.Color(emis!=null?emis:0xff5a1e);
   model.traverse(o=>{if(o.isMesh){o.castShadow=!0;const m=o.material;if(m){
-    m.emissive=new T.Color(0xff5a1e);
-    if(m.map){m.emissiveMap=m.map;m.emissiveIntensity=0.9;}else{m.emissiveIntensity=0.0;}
+    m.emissive=col.clone();
+    if(m.map){m.emissiveMap=m.map;m.emissiveIntensity=0.9;}else{m.emissiveIntensity=0.15;}
     m.needsUpdate=!0;}}});
-
-  axe.remove(axeFallback);
-  axe.add(holder);
-  axeModelHolder=holder;
-  grip.position.set(0,0,0);
-  edgeStrip.position.set(0,-AXE_TARGET_LEN,0);
-},undefined,err=>{console.warn('lava_axe.glb load failed, keeping fallback axe',err)});
-let axeModelHolder=null;
+  return holder;
+}
+let axeModelHolder=null;                 // holder of the CURRENTLY shown weapon model
+const weaponHolders={};                  // weaponId -> loaded holder (cache)
+const weaponLoading={};                  // weaponId -> true while its glb is loading
+const _gltfLoader=new GLTFLoader();
+// Load (once) and show the model for weapon `w`. Falls back to the procedural
+// axe (tinted) if the file is missing or fails — so the game always has a weapon.
+function loadWeaponModel(w){
+  // hide any currently shown model + the fallback; we re-show the right one below
+  if(axeModelHolder)axeModelHolder.visible=!1;
+  if(weaponHolders[w.id]){
+    axeModelHolder=weaponHolders[w.id];axeModelHolder.visible=!0;axeFallback.visible=!1;
+    grip.position.set(0,0,0);edgeStrip.position.set(0,-AXE_TARGET_LEN,0);
+    return;
+  }
+  if(!w.model){                          // no file specified → tinted fallback
+    showFallbackAxe(w.tint);return;
+  }
+  if(weaponLoading[w.id]){showFallbackAxe(w.tint);return}
+  weaponLoading[w.id]=!0;
+  showFallbackAxe(w.tint);               // show fallback while loading
+  _gltfLoader.load(w.model,gltf=>{
+    weaponLoading[w.id]=!1;
+    const holder=buildWeaponHolder(gltf.scene,w.tint);
+    holder.visible=!1;axe.add(holder);weaponHolders[w.id]=holder;
+    if(curWeapon.id===w.id){             // still the active weapon → show it
+      axeFallback.visible=!1;if(axeModelHolder&&axeModelHolder!==holder)axeModelHolder.visible=!1;
+      axeModelHolder=holder;holder.visible=!0;
+      grip.position.set(0,0,0);edgeStrip.position.set(0,-AXE_TARGET_LEN,0);
+    }
+  },undefined,err=>{
+    weaponLoading[w.id]=!1;
+    console.warn('Không tải được model vũ khí "'+w.model+'", dùng rìu dự phòng.',err);
+    if(curWeapon.id===w.id)showFallbackAxe(w.tint);
+  });
+}
+function showFallbackAxe(tint){
+  if(axeModelHolder){axeModelHolder.visible=!1;}
+  axeFallback.visible=!0;
+  const col=new T.Color(tint!=null?tint:0xb04a2a);
+  axeFallback.traverse(o=>{if(o.isMesh&&o.material){o.material.color=col.clone();o.material.emissive=col.clone();o.material.emissiveIntensity=0.35;o.material.needsUpdate=!0}});
+  grip.position.set(0,0,0);edgeStrip.position.set(0,-0.9,0);
+}
+// load the default lava axe on startup
+loadWeaponModel(WEAPONS[0]);
 // seat the axe in the hand: haft angled forward so the blade leads the swing
 axe.position.set(0,-.36,.04);
 axe.rotation.set(-1.55,0,0);
@@ -2170,24 +2210,15 @@ function updateSkillHUD(){
   else{cdEl.textContent='';btn.classList.add('ready');btn.classList.remove('active')}
 }
 
-// ---- đổi vũ khí: cập nhật chỉ số + hình lưỡi vũ khí trên tay ----
+// ---- đổi vũ khí: cập nhật chỉ số + tải/hiện model vũ khí trên tay ----
 function equipWeapon(id){
   const w=WEAPONS.find(x=>x.id===id);if(!w)return;
   Object.assign(curWeapon,w);
-  // đổi màu phát sáng của lưỡi rìu (model lava) / fallback theo vũ khí
-  applyWeaponVisual(w);
+  loadWeaponModel(w);                 // tải/hiện đúng model glb của vũ khí (có cache + fallback)
   skillActive=null;guy.rotation.z=0;
   try{localStorage.setItem('boCuiWeapon',id)}catch(e){}
   updateSelfHUD();updateSkillHUD();
   const el=document.getElementById('me-weapon');if(el)el.textContent=w.icon+' '+w.name;
-}
-function applyWeaponVisual(w){
-  const tint=new T.Color(w.tint);
-  if(axeModelHolder){
-    axeModelHolder.traverse(o=>{if(o.isMesh&&o.material){o.material.emissive=tint.clone();o.material.needsUpdate=!0}});
-  }
-  // fallback blade cũng đổi màu
-  axeFallback.traverse(o=>{if(o.isMesh&&o.material&&o.material.emissive!==undefined){o.material.color=tint.clone()}});
 }
 // Two topologies:
 //  • 1v1   — direct P2P, exactly 2 players (the original mode).
