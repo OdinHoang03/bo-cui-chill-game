@@ -43,7 +43,8 @@ canvas{display:block}
 <div id="log-hp-bar"><div id="log-hp-fill"></div></div>
 <div id="chop-feedback">💥</div>
 <div id="pov-label" class="hidden">🎥 Người thứ 3</div>
-<div id="hint">🖱️ Click/Space: chặt • Kéo chuột: xoay (lên=trên xuống) • Q/1-8: đổi góc (3=góc nhìn thứ nhất)</div>
+<div id="target-label" style="position:absolute;bottom:145px;left:50%;transform:translateX(-50%);color:#7fe0a0;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none"></div>
+<div id="hint">🖱️ Click/Space: chặt • WASD: di chuyển • Kéo chuột: xoay • Q/1-8: đổi góc (3=góc nhìn thứ nhất)</div>
 <div id="bottom-bar"><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
 </div>
@@ -118,11 +119,59 @@ for(let i=0;i<420;i++){
   sc.add(bl);
 }
 
-// ============== TREES ==============
+// ============== WOOD TEXTURES (declared early: trees use barkTex too) ==============
+function makeBarkTexture(){
+  const c=document.createElement('canvas');c.width=256;c.height=256;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,256,0);g.addColorStop(0,'#7a5330');g.addColorStop(.5,'#8a5f36');g.addColorStop(1,'#6e4a2a');
+  x.fillStyle=g;x.fillRect(0,0,256,256);
+  for(let i=0;i<70;i++){
+    const px=Math.random()*256;const w=1+Math.random()*3;
+    x.strokeStyle='rgba('+(40+Math.random()*40|0)+','+(28+Math.random()*24|0)+','+(14+Math.random()*14|0)+','+(0.25+Math.random()*0.5)+')';
+    x.lineWidth=w;x.beginPath();
+    let py=0,cx=px;while(py<256){cx+=(Math.random()-.5)*6;x.lineTo(cx,py);py+=8}
+    x.stroke();
+  }
+  for(let i=0;i<2200;i++){x.fillStyle='rgba(0,0,0,'+Math.random()*0.12+')';x.fillRect(Math.random()*256,Math.random()*256,1,1)}
+  const t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;return t;
+}
+function makeEndTexture(){
+  const c=document.createElement('canvas');c.width=256;c.height=256;const x=c.getContext('2d');
+  x.fillStyle='#d9ae64';x.fillRect(0,0,256,256);
+  const cx=128,cy=128;
+  for(let rr=6;rr<150;rr+=4+Math.random()*5){
+    x.strokeStyle='rgba('+(150+Math.random()*40|0)+','+(110+Math.random()*30|0)+','+(50+Math.random()*30|0)+','+(0.35+Math.random()*0.4)+')';
+    x.lineWidth=1+Math.random()*1.8;x.beginPath();
+    for(let a=0;a<=Math.PI*2+0.1;a+=0.15){const rad=rr+Math.sin(a*3+rr)*1.5+Math.random()*1.2;x.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad)}
+    x.stroke();
+  }
+  for(let i=0;i<7;i++){const a=Math.random()*Math.PI*2;x.strokeStyle='rgba(90,60,30,0.4)';x.lineWidth=1;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*140,cy+Math.sin(a)*140);x.stroke()}
+  const t=new T.CanvasTexture(c);return t;
+}
+function makeSplitTexture(){
+  const c=document.createElement('canvas');c.width=128;c.height=256;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,128,0);g.addColorStop(0,'#c99a54');g.addColorStop(.5,'#e0b56a');g.addColorStop(1,'#c99a54');
+  x.fillStyle=g;x.fillRect(0,0,128,256);
+  for(let i=0;i<140;i++){
+    const px=Math.random()*128;
+    x.strokeStyle='rgba('+(150+Math.random()*60|0)+','+(110+Math.random()*40|0)+','+(50+Math.random()*30|0)+','+(0.2+Math.random()*0.5)+')';
+    x.lineWidth=0.5+Math.random()*1.5;x.beginPath();
+    let py=0,cx=px;while(py<256){cx+=(Math.random()-.5)*2;x.lineTo(cx,py);py+=12}
+    x.stroke();
+  }
+  const t=new T.CanvasTexture(c);return t;
+}
+const barkTex=makeBarkTexture(), endTex=makeEndTexture(), splitTex=makeSplitTexture();
+const woodMat=new T.MeshStandardMaterial({map:barkTex,color:0xB98A4C,roughness:.92,bumpMap:barkTex,bumpScale:.015});
+const woodEndMat=new T.MeshStandardMaterial({map:endTex,color:0xE8C888,roughness:.7});
+const splitMat=new T.MeshStandardMaterial({map:splitTex,color:0xE0B56A,roughness:.8});
+const barkMat=new T.MeshStandardMaterial({color:0x5E3F22,roughness:1});
+
+// ============== TREES (some are choppable) ==============
 function makeTree(x,z,s=1){
   const grp=new T.Group();
   const th=1.6+Math.random()*1.6*s;
-  const tr=new T.Mesh(new T.CylinderGeometry(.16*s,.26*s,th,6),new T.MeshStandardMaterial({color:0x6B4226,roughness:.9}));
+  const trunkR=.24*s;
+  const tr=new T.Mesh(new T.CylinderGeometry(.16*s,.26*s,th,7),new T.MeshStandardMaterial({map:barkTex,color:0x6B4226,roughness:.9,bumpMap:barkTex,bumpScale:.02}));
   tr.position.y=th/2;tr.castShadow=!0;tr.receiveShadow=!0;grp.add(tr);
   const cs=.9+Math.random()*.8*s,cy=th+Math.random()*.3;
   const cMat=new T.MeshStandardMaterial({color:new T.Color().setHSL(.28+Math.random()*.06,.5,.24+Math.random()*.1),roughness:.85});
@@ -132,13 +181,23 @@ function makeTree(x,z,s=1){
     pf.position.set((Math.random()-.5)*cs,cy+(Math.random()-.3)*cs*.5,(Math.random()-.5)*cs);pf.castShadow=!0;grp.add(pf);
   }
   grp.position.set(x,0,z);grp.rotation.y=Math.random()*Math.PI*2;
-  return grp;
+  return {grp,trunkR,th,s};
 }
 const tPos=[];
+const trees=[];              // choppable + decorative trees
 for(let i=0;i<42;i++){
   let x,z,ok,tries=0;
   do{const a=Math.random()*Math.PI*2,r=6+Math.random()*15;x=Math.cos(a)*r;z=Math.sin(a)*r;ok=!0;for(const[ox,oz]of tPos)if(Math.hypot(x-ox,z-oz)<1.8){ok=!1;break}tries++}while(!ok&&tries<20);
-  if(ok){tPos.push([x,z]);sc.add(makeTree(x,z,.7+Math.random()*.6))}
+  if(ok){
+    tPos.push([x,z]);
+    const t=makeTree(x,z,.7+Math.random()*.6);
+    sc.add(t.grp);
+    const dist=Math.hypot(x,z);
+    // trees inside a reachable ring are choppable
+    const choppable=dist<12;
+    trees.push({grp:t.grp,x,z,r:t.trunkR,th:t.th,hp:5+Math.floor(Math.random()*4),maxHp:0,dead:!1,fall:0,fallAxis:null,choppable});
+    trees[trees.length-1].maxHp=trees[trees.length-1].hp;
+  }
 }
 
 // floating pollen
@@ -155,61 +214,7 @@ block.position.set(0,.25,0);block.castShadow=!0;block.receiveShadow=!0;sc.add(bl
 const blockTop=new T.Mesh(new T.CylinderGeometry(.68,.7,.04,12),new T.MeshStandardMaterial({color:0xB0844A,roughness:.7}));
 blockTop.position.set(0,.51,0);sc.add(blockTop);
 
-// ============== LOG (the wood to chop) — procedural detailed textures ==============
-// bark side texture: vertical fibrous streaks + noise
-function makeBarkTexture(){
-  const c=document.createElement('canvas');c.width=256;c.height=256;const x=c.getContext('2d');
-  const g=x.createLinearGradient(0,0,256,0);g.addColorStop(0,'#7a5330');g.addColorStop(.5,'#8a5f36');g.addColorStop(1,'#6e4a2a');
-  x.fillStyle=g;x.fillRect(0,0,256,256);
-  // vertical bark ridges
-  for(let i=0;i<70;i++){
-    const px=Math.random()*256;const w=1+Math.random()*3;
-    x.strokeStyle='rgba('+(40+Math.random()*40|0)+','+(28+Math.random()*24|0)+','+(14+Math.random()*14|0)+','+(0.25+Math.random()*0.5)+')';
-    x.lineWidth=w;x.beginPath();
-    let py=0,cx=px;while(py<256){cx+=(Math.random()-.5)*6;x.lineTo(cx,py);py+=8}
-    x.stroke();
-  }
-  // speckle
-  for(let i=0;i<2200;i++){x.fillStyle='rgba(0,0,0,'+Math.random()*0.12+')';x.fillRect(Math.random()*256,Math.random()*256,1,1)}
-  const t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;return t;
-}
-// end-grain texture: concentric growth rings
-function makeEndTexture(){
-  const c=document.createElement('canvas');c.width=256;c.height=256;const x=c.getContext('2d');
-  x.fillStyle='#d9ae64';x.fillRect(0,0,256,256);
-  const cx=128,cy=128;
-  for(let rr=6;rr<150;rr+=4+Math.random()*5){
-    x.strokeStyle='rgba('+(150+Math.random()*40|0)+','+(110+Math.random()*30|0)+','+(50+Math.random()*30|0)+','+(0.35+Math.random()*0.4)+')';
-    x.lineWidth=1+Math.random()*1.8;x.beginPath();
-    for(let a=0;a<=Math.PI*2+0.1;a+=0.15){const rad=rr+Math.sin(a*3+rr)*1.5+Math.random()*1.2;x.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad)}
-    x.stroke();
-  }
-  // radial cracks in the grain
-  for(let i=0;i<7;i++){const a=Math.random()*Math.PI*2;x.strokeStyle='rgba(90,60,30,0.4)';x.lineWidth=1;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*140,cy+Math.sin(a)*140);x.stroke()}
-  const t=new T.CanvasTexture(c);return t;
-}
-// fibrous inner split-face texture: long vertical wood fibers (looks like fresh split wood)
-function makeSplitTexture(){
-  const c=document.createElement('canvas');c.width=128;c.height=256;const x=c.getContext('2d');
-  const g=x.createLinearGradient(0,0,128,0);g.addColorStop(0,'#c99a54');g.addColorStop(.5,'#e0b56a');g.addColorStop(1,'#c99a54');
-  x.fillStyle=g;x.fillRect(0,0,128,256);
-  for(let i=0;i<140;i++){
-    const px=Math.random()*128;
-    x.strokeStyle='rgba('+(150+Math.random()*60|0)+','+(110+Math.random()*40|0)+','+(50+Math.random()*30|0)+','+(0.2+Math.random()*0.5)+')';
-    x.lineWidth=0.5+Math.random()*1.5;x.beginPath();
-    let py=0,cx=px;while(py<256){cx+=(Math.random()-.5)*2;x.lineTo(cx,py);py+=12}
-    x.stroke();
-  }
-  const t=new T.CanvasTexture(c);return t;
-}
-const barkTex=makeBarkTexture(), endTex=makeEndTexture(), splitTex=makeSplitTexture();
-const barkBump=barkTex.clone();
-
-const woodMat=new T.MeshStandardMaterial({map:barkTex,color:0xB98A4C,roughness:.92,bumpMap:barkTex,bumpScale:.015});
-const woodEndMat=new T.MeshStandardMaterial({map:endTex,color:0xE8C888,roughness:.7});
-const splitMat=new T.MeshStandardMaterial({map:splitTex,color:0xE0B56A,roughness:.8});
-const barkMat=new T.MeshStandardMaterial({color:0x5E3F22,roughness:1});
-
+// ============== LOG (the wood to chop) ==============
 function makeLog(){
   // upright log built from TWO half-cylinders on hinge pivots so it can
   // progressively split open with each chop, then fully separate at the end.
@@ -459,6 +464,18 @@ function emitChips(n,power){
   }
   pa.needsUpdate=!0;chips.visible=!0;
 }
+// chips emitted at an arbitrary world position (for tree chopping)
+function emitChipsAt(wx,wy,wz,n,power){
+  chipActive=Math.min(chipMax,n);
+  const pa=chipGeo.getAttribute('position');
+  for(let i=0;i<chipActive;i++){
+    const a=Math.random()*Math.PI*2,sp=(.6+Math.random()*1.4)*power;
+    pa.array[i*3]=wx;pa.array[i*3+1]=wy;pa.array[i*3+2]=wz;
+    chipVel[i]={x:Math.cos(a)*sp*.6,y:1.5+Math.random()*2.5,z:Math.sin(a)*sp*.6};
+    chipLife[i]=.6+Math.random()*.7;
+  }
+  pa.needsUpdate=!0;chips.visible=!0;
+}
 let chipTimer=0;
 
 // ============== CHILL GUY CHARACTER ==============
@@ -504,42 +521,83 @@ const rArm=new T.Group();
 const rUp=new T.Mesh(new T.CylinderGeometry(.065,.075,.36,8),skin);rUp.position.y=-.18;rUp.castShadow=!0;rArm.add(rUp);
 const rHand=new T.Mesh(new T.SphereGeometry(.075,8,8),skin);rHand.position.y=-.37;rArm.add(rHand);
 
-// AXE — attached to right hand, points outward from the hand
+// AXE — held in the right hand. Built so the haft runs along the arm and the
+// blade edge points DOWNWARD-FORWARD (toward the log) during a swing.
 const axe=new T.Group();
-const haft=new T.Mesh(new T.CylinderGeometry(.028,.035,.72,8),handleM);haft.position.y=-.3;axe.add(haft);
+// wooden haft (handle) along local Y
+const haft=new T.Mesh(new T.CylinderGeometry(.026,.036,.8,10),handleM);
+haft.position.y=-.34;axe.add(haft);
+// grip wrap near the hand
+const grip=new T.Mesh(new T.CylinderGeometry(.04,.04,.14,10),new T.MeshStandardMaterial({color:0x2b2016,roughness:1}));
+grip.position.y=-.02;axe.add(grip);
+// axe HEAD group at the far end of the haft
 const headMetal=new T.Group();
-const cheek=new T.Mesh(new T.BoxGeometry(.12,.16,.06),steel);cheek.position.set(.02,0,0);headMetal.add(cheek);
-const bit=new T.Mesh(new T.BoxGeometry(.1,.2,.04),edge);bit.position.set(-.08,0,0);headMetal.add(bit);
-headMetal.position.set(0,-.62,0);axe.add(headMetal);
-// place axe in hand, angled
-axe.position.set(0,-.37,.02);axe.rotation.set(-1.9,0,0);
+// eye/poll (back of head, where haft passes through)
+const poll=new T.Mesh(new T.BoxGeometry(.09,.14,.09),steel);poll.position.set(.06,0,0);headMetal.add(poll);
+// cheek + flared blade using a wedge; blade widens toward the cutting edge (-x)
+const bladeShape=new T.Mesh(new T.CylinderGeometry(.03,.24,.10,4,1),edge);
+bladeShape.rotation.z=Math.PI/2;         // flat wedge lying horizontally
+bladeShape.rotation.y=Math.PI/2;
+bladeShape.position.set(-.12,0,0);headMetal.add(bladeShape);
+// bright honed edge strip at the very front
+const edgeStrip=new T.Mesh(new T.BoxGeometry(.02,.22,.02),new T.MeshStandardMaterial({color:0xf2f2f2,metalness:.9,roughness:.08}));
+edgeStrip.position.set(-.22,0,0);headMetal.add(edgeStrip);
+headMetal.position.set(0,-.7,0);axe.add(headMetal);
+// seat the axe in the hand: haft angled forward so the blade leads the swing
+axe.position.set(0,-.36,.04);
+axe.rotation.set(-1.55,0,0);
 rArm.add(axe);
 
 rArm.position.set(.32,.86,.05);
 guy.add(rArm);
 
-// place the woodsman and make him FACE the log at the origin.
+// place the woodsman. He can WALK around the clearing (WASD/arrows). He always
+// faces his current chop target (the log, or a nearby tree). GUY_YAW updates.
 guy.position.set(-1.5,0,1.0);
-// forward (+Z local) should point from the guy toward the log (0,0,0)
-const GUY_YAW=Math.atan2(0-guy.position.x, 0-guy.position.z); // atan2(dx,dz)
+let GUY_YAW=Math.atan2(0-guy.position.x, 0-guy.position.z);
 guy.rotation.y=GUY_YAW;
 guy.castShadow=!0;
 sc.add(guy);
 
-// approximate world tip of the axe bit for trail sampling
-const axeTipLocal=new T.Vector3(-.08,-.62,0);
-const _tmp=new T.Vector3();
-function axeTipWorld(){headMetal.getWorldPosition(_tmp);return _tmp.clone()}
+// player movement state
+const player={vx:0,vz:0};
+const keys={};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();if('wasd'.includes(k)){keys[k]=1;e.preventDefault()}});
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();if('wasd'.includes(k))keys[k]=0});
+let chopTarget={type:'log'};   // {type:'log'} or {type:'tree',tree}
 
-// ============== AXE MOTION TRAIL ==============
-const TRAIL_LEN=14;
-const trailGeo=new T.BufferGeometry();
-const trailPos=new Float32Array(TRAIL_LEN*3);
-trailGeo.setAttribute('position',new T.BufferAttribute(trailPos,3));
-const trail=new T.Line(trailGeo,new T.LineBasicMaterial({color:0xffffff,transparent:!0,opacity:0}));
-sc.add(trail);
-const trailPoints=[];
-let trailOpacity=0;
+// approximate world tip of the axe bit for crack placement
+const _tmp=new T.Vector3();
+
+// ============== AXE MOTION TRAIL — dragon-fire ribbon ==============
+// A wide glowing ribbon built from a triangle strip between the axe-edge tip
+// and a point up the haft, trailing over the last N samples. Additive blended
+// with a hot gradient so hard swings look like a blast of fire.
+const TRAIL_LEN=22;
+const trailTip=[];   // world positions of the blade edge
+const trailTop=[];   // world positions higher on the haft (ribbon width)
+const _tp=new T.Vector3(),_tp2=new T.Vector3();
+function axeTipWorld(){edgeStrip.getWorldPosition(_tp);return _tp.clone()}
+function axeTopWorld(){grip.getWorldPosition(_tp2);return _tp2.clone()}
+// ribbon geometry: 2 verts per sample
+const RB=TRAIL_LEN;
+const ribGeo=new T.BufferGeometry();
+const ribPos=new Float32Array(RB*2*3);
+const ribCol=new Float32Array(RB*2*3);
+ribGeo.setAttribute('position',new T.BufferAttribute(ribPos,3));
+ribGeo.setAttribute('color',new T.BufferAttribute(ribCol,3));
+const ribIdx=[];
+for(let i=0;i<RB-1;i++){const a=i*2,b=i*2+1,c=(i+1)*2,d=(i+1)*2+1;ribIdx.push(a,b,c, b,d,c)}
+ribGeo.setIndex(ribIdx);
+const ribMat=new T.MeshBasicMaterial({vertexColors:!0,transparent:!0,opacity:0,blending:T.AdditiveBlending,side:T.DoubleSide,depthWrite:!1});
+const ribbon=new T.Mesh(ribGeo,ribMat);ribbon.frustumCulled=!1;sc.add(ribbon);
+// hot color gradient tip→tail (white-hot → orange → deep red)
+const hot=[new T.Color(0xffffff),new T.Color(0xffd36b),new T.Color(0xff8a2b),new T.Color(0xff3b1e),new T.Color(0x7a0f05)];
+function hotColor(t){const s=t*(hot.length-1);const i=Math.min(hot.length-2,Math.floor(s));return hot[i].clone().lerp(hot[i+1],s-i)}
+let trailOpacity=0, swingPower=1;
+// glow sprite that rides the blade during a swing
+const glowMat=new T.SpriteMaterial({color:0xffa030,transparent:!0,opacity:0,blending:T.AdditiveBlending,depthWrite:!1});
+const glow=new T.Sprite(glowMat);glow.scale.set(1.1,1.1,1);sc.add(glow);
 
 // ============== CHOP ANIMATION — MANY DIRECTIONS ==============
 // rArm.rotation.x = vertical swing (overhead), .z = horizontal/side roll,
@@ -576,29 +634,49 @@ function startChop(){
   curChop=pickStyle();
   chopPhase=0;chopT=0;hitFired=!1;
   St.isChopping=!0;
-  trailPoints.length=0;trailOpacity=0;
+  trailTip.length=0;trailTop.length=0;trailOpacity=0;
+  swingPower=(curChop.dmg>=2?1.6:1)*(1+Math.min(St.combo,8)*0.12); // combo makes fire fiercer
   audio.chop();
 }
 
 function landHit(){
   const c=curChop||CHOP_STYLES[0];
-  emitChips(c.chips,1+ (c.dmg-1)*0.6);
   audio.chop();
   St.chops++;
-  St.logHP-=c.dmg;
-  if(St.logHP<0)St.logHP=0;
   const now=performance.now();
   if(now-St.lastChop<1600)St.combo++;else St.combo=1;
   St.lastChop=now;
   if(St.combo>St.maxCombo)St.maxCombo=St.combo;
+  const shakeMs=120+c.dmg*50;
+  document.body.style.animation='shake '+(shakeMs/1000)+'s ease-out';setTimeout(()=>document.body.style.animation='',shakeMs);
+  const fb=document.getElementById('chop-feedback');
+
+  if(chopTarget.type==='tree'){
+    // ===== chopping a forest tree =====
+    const tr=chopTarget.tree;
+    emitChipsAt(tr.x,1.0,tr.z,c.chips,1);
+    tr.hp-=c.dmg;
+    tr.grp.userData.wob=.4;
+    fb.textContent=tr.hp<=0?'🌲 ĐỔ CÂY!':'🪓 '+c.name;
+    fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
+    if(tr.hp<=0&&!tr.dead){
+      tr.dead=!0;tr.fall=0.0001;
+      tr.fallAxis=new T.Vector3(Math.cos(GUY_YAW),0,-Math.sin(GUY_YAW)); // fall away from player
+      St.score+=15+Math.floor(St.combo*2);St.wood+=2;
+      audio.split();emitChipsAt(tr.x,0.4,tr.z,30,1.6);
+    }else{St.score+=c.dmg}
+    updateUI();return;
+  }
+
+  // ===== chopping the central log =====
+  emitChips(c.chips,1+ (c.dmg-1)*0.6);
+  St.logHP-=c.dmg;
+  if(St.logHP<0)St.logHP=0;
   const tip=axeTipWorld();
   applyChopVisual(tip.y);
   if(logGrp){logGrp.userData.wob=.35+c.dmg*.12;logGrp.userData.wobDir=(c.side||0)!==0?Math.sign(-c.side):(Math.random()<.5?1:-1)}
-  const fb=document.getElementById('chop-feedback');
   fb.textContent=St.logHP<=0?'🪵 BỔ ĐÔI!':(c.dmg>=2?'💪 '+c.name:(St.combo>=3?'🔥 x'+St.combo:'🪓 '+c.name));
   fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
-  const shakeMs=120+c.dmg*50;
-  document.body.style.animation='shake '+(shakeMs/1000)+'s ease-out';setTimeout(()=>document.body.style.animation='',shakeMs);
   if(St.logHP<=0){
     St.score+=10+Math.floor(St.combo*2);
     St.wood++;
@@ -640,7 +718,7 @@ function updateChop(dt){
     guy.rotation.y=GUY_YAW+(c.yaw||0)*(1-e*0.4);
     guy.rotation.z=(-c.lean*0.7 + c.side*0.4)+(c.lean*0.9)*e;
     if(c.twoHand){lArm.rotation.x=(c.up*0.4)+((-0.5)-(c.up*0.4))*e;lArm.rotation.z=-0.15+(-0.2)*e}
-    trailOpacity=.95;
+    trailOpacity=1;
     if(p>=1&&!hitFired){hitFired=!0;landHit();chopPhase=2;chopT=0}
   }else if(chopPhase===2){ // recover to idle facing log
     const p=Math.min(chopT/c.rec,1);const e=easeOut(p);
@@ -768,6 +846,60 @@ function updateUI(){
   document.getElementById('log-hp-fill').style.width=(St.logHP/St.logMaxHP*100)+'%';
 }
 
+// ============== PLAYER MOVEMENT + TARGET SELECTION ==============
+const _fwd=new T.Vector3();
+function updatePlayer(dt,time){
+  // camera-relative WASD movement on the ground plane
+  cam.getWorldDirection(_fwd);_fwd.y=0;_fwd.normalize();
+  const right=new T.Vector3(-_fwd.z,0,_fwd.x);
+  let mx=0,mz=0;
+  if(keys['w']){mx+=_fwd.x;mz+=_fwd.z}
+  if(keys['s']){mx-=_fwd.x;mz-=_fwd.z}
+  if(keys['d']){mx+=right.x;mz+=right.z}
+  if(keys['a']){mx-=right.x;mz-=right.z}
+  const moving=(mx||mz)&&!St.isChopping;
+  if(moving){
+    const l=Math.hypot(mx,mz);mx/=l;mz/=l;
+    const spd=3.2;
+    let nx=guy.position.x+mx*spd*dt, nz=guy.position.z+mz*spd*dt;
+    // keep inside the clearing ring, don't walk onto the block
+    const rr=Math.hypot(nx,nz);
+    if(rr>13){nx*=13/rr;nz*=13/rr}
+    if(rr<1.15){const s=1.15/rr;nx*=s;nz*=s} // block radius
+    guy.position.x=nx;guy.position.z=nz;
+    // face travel direction while walking
+    GUY_YAW=Math.atan2(mx,mz);
+    // simple leg/step bob
+    guy.position.y=Math.abs(Math.sin(time*10))*0.04;
+  }else{
+    guy.position.y+=(0-guy.position.y)*.2;
+  }
+
+  // pick the closest choppable target in front of the player
+  let best=null,bestD=1e9;
+  // the central log
+  if(logGrp){const d=Math.hypot(guy.position.x-0,guy.position.z-0);if(d<bestD){bestD=d;best={type:'log'}}}
+  for(const tr of trees){
+    if(!tr.choppable||tr.dead)continue;
+    const d=Math.hypot(guy.position.x-tr.x,guy.position.z-tr.z);
+    if(d<2.4&&d<bestD){bestD=d;best={type:'tree',tree:tr}}
+  }
+  chopTarget=best||{type:'log'};
+  // when idle & not chopping, face the target
+  if(!moving&&!St.isChopping){
+    let ang;
+    if(chopTarget.type==='tree')ang=Math.atan2(chopTarget.tree.x-guy.position.x,chopTarget.tree.z-guy.position.z);
+    else ang=Math.atan2(0-guy.position.x,0-guy.position.z);
+    GUY_YAW=ang;
+  }
+  // update prompt label
+  const pr=document.getElementById('target-label');
+  if(pr){
+    if(chopTarget.type==='tree')pr.textContent='🌲 Bấm để đốn cây (HP '+Math.max(0,chopTarget.tree.hp)+')';
+    else pr.textContent='';
+  }
+}
+
 // ============== MAIN LOOP ==============
 const clock=new T.Clock();
 function loop(){
@@ -778,19 +910,36 @@ function loop(){
   // idle head bob
   head.position.y=1.12+Math.sin(time*.9)*.006;
 
+  updatePlayer(dt,time);
   updateChop(dt);
 
-  // axe trail
+  // ===== DRAGON-FIRE axe trail (wide additive ribbon) =====
   if(trailOpacity>.02){
-    trailPoints.unshift(axeTipWorld());
-    if(trailPoints.length>TRAIL_LEN)trailPoints.pop();
-    for(let i=0;i<TRAIL_LEN;i++){
-      const pnt=trailPoints[Math.min(i,trailPoints.length-1)]||axeTipWorld();
-      trailPos[i*3]=pnt.x;trailPos[i*3+1]=pnt.y;trailPos[i*3+2]=pnt.z;
+    trailTip.unshift(axeTipWorld());
+    trailTop.unshift(axeTopWorld());
+    if(trailTip.length>RB){trailTip.pop();trailTop.pop()}
+    for(let i=0;i<RB;i++){
+      const a=Math.min(i,trailTip.length-1);
+      const tip=trailTip[a]||axeTipWorld();
+      const top=trailTop[a]||axeTopWorld();
+      // widen the ribbon a bit beyond the haft for a flame look
+      const wx=tip.x+(tip.x-top.x)*0.15, wy=tip.y+(tip.y-top.y)*0.15, wz=tip.z+(tip.z-top.z)*0.15;
+      ribPos[i*6]=wx;ribPos[i*6+1]=wy;ribPos[i*6+2]=wz;
+      ribPos[i*6+3]=top.x;ribPos[i*6+4]=top.y;ribPos[i*6+5]=top.z;
+      const fade=1-i/(RB-1);
+      const col=hotColor(1-fade);          // tip = white hot, tail = deep red
+      const b=fade*swingPower;
+      ribCol[i*6]=col.r*b;ribCol[i*6+1]=col.g*b;ribCol[i*6+2]=col.b*b;
+      ribCol[i*6+3]=col.r*b;ribCol[i*6+4]=col.g*b;ribCol[i*6+5]=col.b*b;
     }
-    trailGeo.attributes.position.needsUpdate=!0;
-    trail.material.opacity=trailOpacity;
-  }else{trail.material.opacity=0;trailPoints.length=0}
+    ribGeo.attributes.position.needsUpdate=!0;
+    ribGeo.attributes.color.needsUpdate=!0;
+    ribMat.opacity=Math.min(1,trailOpacity)*0.9;
+    // glow sprite on the blade
+    const t2=axeTipWorld();glow.position.copy(t2);
+    glowMat.opacity=Math.min(1,trailOpacity)*0.8;
+    glow.scale.setScalar(0.7+swingPower*0.5);
+  }else{ribMat.opacity=0;glowMat.opacity=0;trailTip.length=0;trailTop.length=0}
 
   // log drop-in animation
   if(logDrop&&logGrp){
@@ -826,6 +975,28 @@ function loop(){
     const tl=L.userData.tRot||0, tr=R.userData.tRot||0;
     L.rotation.z+=(tl-L.rotation.z)*.18;
     R.rotation.z+=(tr-R.rotation.z)*.18;
+  }
+
+  // forest trees: hit wobble + falling/collapse animation
+  for(const tr of trees){
+    if(tr.grp.userData.wob){
+      tr.grp.userData.wob*=.85;
+      tr.grp.rotation.z=Math.sin(time*38)*tr.grp.userData.wob*.05;
+      if(tr.grp.userData.wob<.01){tr.grp.userData.wob=0;if(!tr.dead)tr.grp.rotation.z=0}
+    }
+    if(tr.dead&&tr.fall<Math.PI/2){
+      tr.fall=Math.min(Math.PI/2,tr.fall+dt*(1.2+tr.fall*1.6)); // accelerating topple
+      // rotate the whole tree around its base along the fall axis
+      tr.grp.rotation.set(0,0,0);
+      tr.grp.rotateOnAxis(tr.fallAxis,tr.fall);
+      if(tr.fall>=Math.PI/2&&!tr.landed){
+        tr.landed=!0;audio.chop();
+        emitChipsAt(tr.x+tr.fallAxis.x*tr.th,0.2,tr.z+tr.fallAxis.z*tr.th,16,1);
+        document.body.style.animation='shake .2s ease-out';setTimeout(()=>document.body.style.animation='',200);
+        // leave a stump: shrink canopy, keep short trunk
+        setTimeout(()=>{tr.grp.visible=!1},4000);
+      }
+    }
   }
 
   // flying split halves physics
