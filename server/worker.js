@@ -67,7 +67,11 @@ export class Room {
   send(ws, obj) { try { ws.send(JSON.stringify(obj)); } catch (e) {} }
   sendToId(id, obj) { for (const ws of this.liveSockets()) if (this.meta(ws).id === id) { this.send(ws, obj); return; } }
   broadcast(obj, exceptId) { const s = JSON.stringify(obj); for (const ws of this.liveSockets()) { if (exceptId && this.meta(ws).id === exceptId) continue; try { ws.send(s); } catch (e) {} } }
-  sendRoster() { this.broadcast({ t: 'roster', players: this.roster(), max: MAX }); }
+  // TRỌNG TÀI phòng = socket còn sống LÂU NHẤT (vào sớm nhất). Ổn định qua F5 của
+  // người khác: chỉ khi chính trọng tài rời đi mới chuyển cho người kế tiếp. Đây
+  // là bên chạy AI boss + đồng hồ, nên phòng luôn có đúng MỘT trọng tài.
+  authId() { const s = this.liveSockets(); return s.length ? (this.meta(s[0]).id || null) : null; }
+  sendRoster() { this.broadcast({ t: 'roster', players: this.roster(), max: MAX, authId: this.authId() }); }
 
   async fetch(request) {
     const url = new URL(request.url);
@@ -98,7 +102,7 @@ export class Room {
     const waiting = room && this.activeCount() >= MAX;
     this.setMeta(server, { id, name, room, waiting, lvl: 1, kills: 0, deaths: 0, dead: false, hp: 100, hpMax: 100 });
 
-    this.send(server, { t: 'welcome', id, room, waiting, max: MAX, slot: waiting ? 'Phòng đang đầy — bạn vào hàng chờ' : '' });
+    this.send(server, { t: 'welcome', id, room, waiting, max: MAX, authId: this.authId(), slot: waiting ? 'Phòng đang đầy — bạn vào hàng chờ' : '' });
     this.sendRoster();
     return new Response(null, { status: 101, webSocket: client });
   }

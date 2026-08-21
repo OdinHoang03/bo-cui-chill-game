@@ -2379,7 +2379,11 @@ const BOSS_SPEED=3.1;        // tốc độ đuổi
 const Boss={active:!1,grp:null,head:null,jaw:null,legL:null,legR:null,armL:null,armR:null,tail:[],eyeMats:[],
   hp:0,hpMax:0,dmgMul:1,x:0,z:0,yaw:0,tx:0,tz:0,tyaw:0,timer:BOSS_FIRST,spawnAt:0,warned:!1,
   attackCd:0,anim:0,animT:0,biteSeq:0,lastBiteSeq:0,bitDone:!1,walk:0,spawnFx:0};
-function bossAuthority(){return !netConnected()||netRole==='host'}
+function bossAuthority(){
+  if(!netConnected())return !0;                 // chơi đơn: tự làm trọng tài
+  if(netMode==='ws')return roomAuthId===Me.id;  // WS: server chỉ định (bền qua F5, tự chuyển khi chủ rời)
+  return netRole==='host';                      // P2P: chủ phòng
+}
 // hẹn giờ boss xuất hiện theo ĐỒNG HỒ TƯỜNG (Date.now) — bền qua F5 nhờ lưu mốc
 // tuyệt đối vào localStorage; performance.now reset khi tải lại nên KHÔNG dùng.
 function scheduleBoss(sec){Boss.spawnAt=Date.now()+sec*1000;Boss.timer=sec;Boss.warned=!1;saveBossSchedule()}
@@ -2829,6 +2833,7 @@ let peer=null, netRole=null;         // 'host' | 'guest'
 let roomMode=!1;                     // false = 1v1, true = up to 8
 let hostId=null;                     // guest: the host's peer id
 let myCode=null;
+let roomAuthId=null;                 // WS: id trọng tài phòng do server chỉ định (chạy AI boss)
 const conns={};                      // peerId -> DataConnection (host holds many; guest holds just the host)
 // ---- transport selection: Cloudflare server (WebSocket) or PeerJS (P2P) ----
 // Nếu bạn đã deploy server Cloudflare Worker, dán URL của nó vào đây, ví dụ:
@@ -2847,16 +2852,27 @@ function mpMsg(t){document.getElementById('mp-msg').textContent=t}
 function roomCode(){let s='';const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';for(let i=0;i<6;i++)s+=A[Math.floor(Math.random()*A.length)];return s}
 const PEER_PREFIX='bocui3d-';
 function netConnected(){return netMode==='ws'?(ws&&ws.readyState===1):Object.keys(conns).length>0}
-// invite URL carries the code and the mode (#room=CODE&m=r|1)
-function inviteUrl(code){return location.origin+location.pathname+'#room='+code+'&m='+(roomMode?'r':'1')}
+// invite URL carries the code and the mode as QUERY (?room=CODE&m=r|1) —
+// query sống sót khi dán vào trình duyệt / refresh tốt hơn hash (nhiều app chat
+// cắt mất phần #...). roomFromUrl vẫn đọc được cả hash cũ lẫn query mới.
+function inviteUrl(code){return location.origin+location.pathname+'?room='+code+'&m='+(roomMode?'r':'1')}
 function roomFromUrl(){
   const h=location.hash||'', q=new URLSearchParams(location.search);
   let code='',mode='';
-  const m=h.match(/room=([A-Za-z0-9]+)/);if(m)code=m[1];
-  const mm=h.match(/[#&]m=([r1])/);if(mm)mode=mm[1];
-  if(!code)code=q.get('room')||'';
-  if(!mode)mode=q.get('m')||'';
+  // ưu tiên query (?room=...&m=...); vẫn hỗ trợ hash cũ (#room=...) cho link đã gửi
+  code=q.get('room')||'';
+  mode=q.get('m')||'';
+  if(!code){const m=h.match(/room=([A-Za-z0-9]+)/);if(m)code=m[1]}
+  if(!mode){const mm=h.match(/[#&]m=([r1])/);if(mm)mode=mm[1]}
   return {code:code.trim().toUpperCase(),room:mode==='r'};
+}
+// gắn mã phòng vào thanh địa chỉ (query) để F5 quay lại đúng phòng, không xoá state
+function setUrlRoom(code){
+  try{const u=new URL(location.href);u.hash='';u.searchParams.set('room',code);u.searchParams.set('m',roomMode?'r':'1');history.replaceState(null,'',u.toString())}catch(e){}
+}
+// xoá mã phòng khỏi URL (khi rời phòng) để F5 không auto-join lại
+function clearUrlRoom(){
+  try{const u=new URL(location.href);u.hash='';u.searchParams.delete('room');u.searchParams.delete('m');history.replaceState(null,'',u.pathname+u.search)}catch(e){}
 }
 // ICE servers: STUN handles most cases; TURN relays when a player is behind a
 // strict/symmetric NAT (mobile 4G/5G, school/office WiFi). We keep the list SMALL
@@ -2968,6 +2984,7 @@ function applyMsg(d,fromId){
       if(netRole==='host')hostHandleDeath(d.id||fromId);
       break;
     case 'roster':                       // host → guests: full player list + queue
+      if(d.authId!==undefined)roomAuthId=d.authId;   // cập nhật trọng tài boss (WS)
       applyRoster(d.players,d.queue);
       break;
     case 'setWaiting':                   // host tells a specific player to wait / play
@@ -3178,7 +3195,29 @@ document.getElementById('mp-btn').addEventListener('click',()=>{
   closeAllPanels();
   if(!wasOn){
     mpPanel.classList.add('on');
-    // luôn về màn hình đầu (đặt tên + chọn chế độ) và điền sẵn tên hiện tại
+    // ĐANG Ở TRONG PHÒNG? → hiện lại đúng trạng thái, KHÔNG reset về màn chọn chế
+    // độ (tránh host vô tình bấm tạo phòng mới rồi bỏ phòng cũ → mất host → boss
+    // không xuất hiện).
+    if(netConnected()){
+      document.getElementById('mp-idle').style.display='none';
+      if(netRole==='host'&&myCode){
+        // host: hiện lại mã/link phòng đang mở
+        document.getElementById('mp-hosting').style.display='block';
+        document.getElementById('mp-joining').style.display='none';
+        document.getElementById('mp-code').textContent=myCode;
+        document.getElementById('mp-link').textContent=inviteUrl(myCode);
+        document.getElementById('mp-mode-tag').textContent=(roomMode?'👥 Phòng đông (tối đa 16 người)':'⚔️ Phòng 1v1')+(USE_WS?' · 🌐 Server':' · P2P');
+        mpMsg('✅ Bạn đang là CHỦ phòng '+myCode+'. Giữ tab này mở để phòng còn chủ (boss cần chủ phòng để xuất hiện). Chia sẻ mã/link ở trên.');
+      }else{
+        // khách: cho nút rời phòng
+        document.getElementById('mp-hosting').style.display='none';
+        document.getElementById('mp-joining').style.display='none';
+        mpMsg('🟢 Bạn đang trong phòng'+(myCode?' '+myCode:'')+'. Đóng bảng này để tiếp tục chơi.');
+      }
+      ensureLeaveBtn();
+      return;
+    }
+    // chưa vào phòng: luôn về màn hình đầu (đặt tên + chọn chế độ) và điền sẵn tên
     document.getElementById('mp-idle').style.display='block';
     document.getElementById('mp-hosting').style.display='none';
     document.getElementById('mp-joining').style.display='none';
@@ -3187,6 +3226,29 @@ document.getElementById('mp-btn').addEventListener('click',()=>{
     mpMsg('');
   }
 });
+// nút "Rời phòng" (tạo động khi đang ở trong phòng) — ngắt kết nối gọn gàng + xoá URL
+function ensureLeaveBtn(){
+  let b=document.getElementById('mp-leave');
+  if(!b){b=document.createElement('button');b.id='mp-leave';b.className='btn';b.style.background='#b5462a';b.textContent='🚪 Rời phòng';
+    document.getElementById('mp-msg').parentNode.insertBefore(b,document.getElementById('mp-msg'));
+    b.addEventListener('click',leaveRoom)}
+  b.style.display='block';
+}
+function leaveRoom(){
+  try{if(ws){ws.onclose=null;ws.close()}}catch(e){}
+  try{if(peer&&!peer.destroyed)peer.destroy()}catch(e){}
+  for(const k in conns)delete conns[k];
+  for(const id in peers)removePeer(id);
+  ws=null;netRole=null;hostId=null;myCode=null;
+  clearUrlRoom();
+  setNet('🔌 Đã rời phòng',!0);
+  showChatUI(!1);renderLeaderboard();
+  const lb=document.getElementById('mp-leave');if(lb)lb.style.display='none';
+  document.getElementById('mp-idle').style.display='block';
+  document.getElementById('mp-hosting').style.display='none';
+  document.getElementById('mp-joining').style.display='none';
+  mpMsg('Đã rời phòng. Bạn có thể tạo/vào phòng mới.');
+}
 // bắt buộc đặt tên trước khi vào server: đọc ô tên, lưu lại, chặn nếu bỏ trống
 function ensureMpName(){
   const ni=document.getElementById('mp-name-input');
@@ -3221,11 +3283,13 @@ function wsConnect(code,asRoom,isHost){
     if(!d||!d.t)return;
     if(d.t==='welcome'){
       Me.id=d.id;roomMode=!!d.room;if(d.max)window.__srvMax=d.max;
+      if(d.authId!==undefined)roomAuthId=d.authId;
       // host keeps the panel open to show/share the code; guest closes it
       if(netRole==='guest')mpPanel.classList.remove('on');
       if(d.waiting){Me.waiting=!0;enterWaiting(d.slot)}
       if(netRole==='host'){mpMsg('✅ Phòng đã mở trên server. Chia sẻ mã/link rồi giữ tab này.')}
       else{setNet(roomMode?'🟢 Đã vào phòng':'🟢 Đã kết nối — PvP bật!',!0);feed('🟢 Đã vào phòng!')}
+      setUrlRoom(myCode);      // gắn ?room=... để F5 quay lại đúng phòng
       showChatUI(!0);chatAppend('💬 Trò chuyện đã bật — nhấn Enter hoặc 💬 để gõ.','sys');
       wsSend(helloPayload());renderLeaderboard();
       // ask the room for the current shared log so we see the same one
