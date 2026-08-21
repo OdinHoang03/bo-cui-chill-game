@@ -2357,15 +2357,21 @@ function bossTargets(){
 function bossSpawn(){
   const n=1+activePeers().length;
   Boss.hpMax=Math.round(420+n*260);Boss.hp=Boss.hpMax;
-  const a=Math.random()*Math.PI*2;Boss.x=Math.cos(a)*18;Boss.z=Math.sin(a)*18;Boss.yaw=a+Math.PI;
+  // sinh gần người chơi & trong tầm nhìn (không lọt vào sương mù ở rìa sân)
+  const a=GUY_YAW+(Math.random()-0.5)*1.2;              // phía trước-lệch của người chơi
+  const r=11;
+  Boss.x=guy.position.x+Math.sin(a)*r;Boss.z=guy.position.z+Math.cos(a)*r;
+  const rr=Math.hypot(Boss.x,Boss.z);if(rr>19){Boss.x*=19/rr;Boss.z*=19/rr}
+  Boss.yaw=Math.atan2(guy.position.x-Boss.x,guy.position.z-Boss.z);   // quay mặt về người chơi
   Boss.active=!0;Boss.attackCd=1.5;Boss.anim=0;Boss.spawnFx=1;
   Boss.grp.visible=!0;Boss.grp.position.set(Boss.x,0,Boss.z);Boss.grp.rotation.y=Boss.yaw;
   Boss.tx=Boss.x;Boss.tz=Boss.z;Boss.tyaw=Boss.yaw;
   audio.roar();document.body.style.animation='shake .6s ease-out';setTimeout(()=>document.body.style.animation='',600);
+  emitChipsAt(Boss.x,2,Boss.z,40,2.6);                 // bụi lóe khi xuất hiện
   showFloat('🦖 KHỦNG LONG BẠO CHÚA XUẤT HIỆN!','#ff6a4a');
   feed('🦖 <b>Khủng long bạo chúa</b> đã xuất hiện — cùng nhau hạ nó!');
   if(netConnected())broadcast({t:'bossSpawn',hp:Boss.hp,hpMax:Boss.hpMax,x:Boss.x,z:Boss.z,yaw:Boss.yaw});
-  updateBossBar();
+  updateBossBar();updateBossTimer();
 }
 // ---- gây sát thương LÊN boss (mọi người gọi; authority áp dụng, người khác gửi bossHit) ----
 function hitBoss(amount,crit){
