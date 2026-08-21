@@ -7,7 +7,8 @@ compatibility_date = "2024-09-23"
 name = "ROOMS"
 class_name = "Room"
 
-# Bắt buộc khai báo migration cho Durable Object mới
+# Bắt buộc khai báo migration cho Durable Object mới.
+# Gói MIỄN PHÍ yêu cầu Durable Object nền SQLite → dùng new_sqlite_classes.
 [[migrations]]
 tag = "v1"
-new_classes = ["Room"]
+new_sqlite_classes = ["Room"]

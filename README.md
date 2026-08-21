@@ -55,6 +55,8 @@ https://bo-cui-chill-server.<tài-khoản>.workers.dev
 
 Kiểm tra sống bằng cách mở URL đó trên trình duyệt — thấy chữ `Bo Cui Chill 3D server OK` là được.
 
+> ⚠️ **Gói miễn phí:** `wrangler.toml` đã dùng `new_sqlite_classes` (Durable Object nền SQLite) đúng yêu cầu của gói free. Nếu Wrangler báo lỗi `code: 10097` đòi `new_sqlite_classes`, nghĩa là bạn đang dùng file cũ — hãy kéo bản mới nhất.
+
 ### 🔌 Cắm server vào game
 
 Mở `index.html`, tìm dòng:
