@@ -2436,7 +2436,16 @@ let bossNetTick=0;
 let bossTimerNetTick=0;
 function broadcastBoss(){
   if(!netConnected()||!bossAuthority())return;
-  broadcast({t:'boss',hp:Boss.hp,x:+Boss.grp.position.x.toFixed(2),z:+Boss.grp.position.z.toFixed(2),yaw:+Boss.yaw.toFixed(2),bite:Boss.biteSeq});
+  broadcast({t:'boss',hp:Boss.hp,hpMax:Boss.hpMax,x:+Boss.grp.position.x.toFixed(2),z:+Boss.grp.position.z.toFixed(2),yaw:+Boss.yaw.toFixed(2),bite:Boss.biteSeq});
+}
+// gửi trọn trạng thái boss cho MỘT người (khi họ vừa vào phòng) — đồng bộ tức thì
+function sendBossSnapshotTo(pid){
+  if(!bossAuthority())return;
+  if(Boss.active){
+    netSendTo(pid,{t:'bossSpawn',hp:Boss.hp,hpMax:Boss.hpMax,x:+Boss.grp.position.x.toFixed(2),z:+Boss.grp.position.z.toFixed(2),yaw:+Boss.yaw.toFixed(2)});
+  }else{
+    netSendTo(pid,{t:'bossTimer',timer:Math.max(0,Boss.timer)});
+  }
 }
 // đòn cắn của boss gây sát thương (authority quyết định)
 function bossBite(){
@@ -2777,6 +2786,8 @@ function applyMsg(d,fromId){
       // avoids an endless hello ping-pong.
       if(!known)netSendTo(pid,helloPayload());
       if(netMode==='p2p'&&netRole==='host')sendRoster();
+      // 🦖 host gửi ngay trạng thái boss cho người mới vào để đồng bộ tức thì
+      if(bossAuthority())sendBossSnapshotTo(pid);
       renderLeaderboard();
       break;
     }
@@ -2848,8 +2859,9 @@ function applyMsg(d,fromId){
     }
     case 'boss':{                            // host đồng bộ trạng thái boss
       if(bossAuthority())break;
-      Boss.hp=d.hp;Boss.tx=d.x;Boss.tz=d.z;Boss.tyaw=d.yaw;if(typeof d.bite==='number')Boss.biteSeq=d.bite;
-      if(!Boss.active){Boss.active=!0;Boss.grp.visible=!0}updateBossBar();break;
+      Boss.hp=d.hp;if(typeof d.hpMax==='number')Boss.hpMax=d.hpMax;Boss.tx=d.x;Boss.tz=d.z;Boss.tyaw=d.yaw;if(typeof d.bite==='number')Boss.biteSeq=d.bite;
+      if(!Boss.active){Boss.active=!0;Boss.grp.visible=!0;Boss.grp.position.set(d.x,0,d.z);Boss.grp.rotation.y=d.yaw;Boss.yaw=d.yaw}
+      updateBossBar();updateBossTimer();break;
     }
     case 'bossHit':{                         // guest đánh trúng → host trừ máu
       if(!bossAuthority()||!Boss.active)break;
