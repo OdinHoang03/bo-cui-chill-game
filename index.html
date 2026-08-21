@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+?<!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
@@ -38,6 +38,46 @@ canvas{display:block}
 #charge-label{text-align:center;color:#fff;font-size:12px;font-weight:700;margin-top:3px;text-shadow:0 1px 3px rgba(0,0,0,.7)}
 #charge-wrap.full #charge-bar{box-shadow:0 0 16px rgba(255,110,40,.9);border-color:rgba(255,150,60,.9)}
 #credit{position:absolute;bottom:6px;left:10px;color:rgba(255,255,255,.4);font-size:11px;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+/* ===== player HP + progression + multiplayer UI ===== */
+#my-hp{position:absolute;top:20px;left:20px;width:230px;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:9px 14px;color:#fff;font-size:12px}
+#my-hp .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+#my-hp .nm{font-weight:700}
+#my-hp .lvl{opacity:.75;font-size:11px}
+.hpbar{height:11px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);border-radius:6px;overflow:hidden}
+.hpbar>i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#57d97a,#a8e063);transition:width .18s}
+.hpbar.low>i{background:linear-gradient(90deg,#ff5f5f,#ff9a5a)}
+#my-hp .hpnum{margin-top:3px;opacity:.85;font-size:11px;text-align:right}
+#upg-btn,#mp-btn{background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 16px;color:#fff;font-size:14px;cursor:pointer;transition:all .2s}
+#upg-btn:hover,#mp-btn:hover{background:rgba(255,255,255,.15);transform:scale(1.05)}
+.panel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(.94);width:min(92vw,460px);max-height:78vh;overflow-y:auto;background:rgba(16,24,18,.93);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:18px 20px;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:30}
+.panel.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.panel h2{font-size:19px;margin-bottom:4px}
+.panel .sub{opacity:.7;font-size:12px;margin-bottom:12px}
+.panel .close{position:absolute;top:12px;right:14px;background:none;border:none;color:rgba(255,255,255,.6);font-size:20px;cursor:pointer}
+.up-row{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:9px 11px;margin-bottom:8px}
+.up-row .info{flex:1;min-width:0}
+.up-row .t{font-size:13px;font-weight:700}
+.up-row .d{font-size:11px;opacity:.65}
+.up-row .pips{display:flex;gap:3px;margin-top:4px}
+.up-row .pips i{width:13px;height:5px;border-radius:3px;background:rgba(255,255,255,.16)}
+.up-row .pips i.f{background:linear-gradient(90deg,#f6d365,#fda085)}
+.up-row button{background:linear-gradient(135deg,#3f8f5a,#2f6f45);border:1px solid rgba(255,255,255,.2);border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:7px 11px;cursor:pointer;white-space:nowrap;transition:all .15s}
+.up-row button:hover:not(:disabled){filter:brightness(1.2);transform:scale(1.05)}
+.up-row button:disabled{opacity:.4;cursor:not-allowed}
+.panel input{width:100%;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);border-radius:10px;color:#fff;font-size:14px;padding:9px 12px;margin:6px 0 10px;font-family:inherit}
+.panel .btn{display:block;width:100%;background:linear-gradient(135deg,#3f8f5a,#2f6f45);border:1px solid rgba(255,255,255,.2);border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:11px;cursor:pointer;margin-bottom:8px;transition:all .15s}
+.panel .btn:hover{filter:brightness(1.2)}
+.panel .btn.alt{background:linear-gradient(135deg,#3a6f9f,#2b527a)}
+.panel .code{font-family:ui-monospace,Consolas,monospace;font-size:24px;font-weight:800;letter-spacing:3px;text-align:center;background:rgba(0,0,0,.45);border:1px dashed rgba(255,255,255,.28);border-radius:12px;padding:12px;margin:8px 0;color:#f6d365;user-select:all}
+.panel .note{font-size:11px;opacity:.6;line-height:1.5}
+#net-status{position:absolute;top:20px;left:50%;transform:translateX(-50%);margin-top:96px;font-size:12px;color:#7fe0a0;background:rgba(0,0,0,.4);padding:4px 12px;border-radius:8px;backdrop-filter:blur(4px);display:none}
+#net-status.on{display:block}
+#kill-feed{position:absolute;top:150px;right:20px;width:230px;display:flex;flex-direction:column;gap:5px;pointer-events:none}
+#kill-feed div{background:rgba(0,0,0,.55);border-left:3px solid #ff7a4d;border-radius:8px;padding:5px 10px;color:#fff;font-size:12px;animation:fadeOut 4.5s forwards}
+#dead-overlay{position:absolute;inset:0;background:rgba(90,0,0,.35);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;flex-direction:column;color:#fff;z-index:25}
+#dead-overlay.on{display:flex}
+#dead-overlay .big{font-size:46px;font-weight:900;text-shadow:0 4px 20px rgba(0,0,0,.6)}
+@keyframes fadeOut{0%,70%{opacity:1}100%{opacity:0}}
 @keyframes floatUp{0%{transform:translate(-50%,-50%) scale(.5);opacity:1}100%{transform:translate(-50%,-150%) scale(1.3);opacity:0}}
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
 </style>
@@ -51,10 +91,46 @@ canvas{display:block}
 <div id="pov-label" class="hidden">🎥 Người thứ 3</div>
 <div id="target-label" style="position:absolute;bottom:145px;left:50%;transform:translateX(-50%);color:#7fe0a0;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none"></div>
 <div id="charge-wrap"><div id="charge-bar"><div id="charge-fill"></div></div><div id="charge-label">TỤ LỰC</div></div>
-<div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • Kéo chuột: xoay • Q/1-8: đổi góc</div>
-<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
+<div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • U: nâng cấp • F: bổ nhanh • Q/1-8: đổi góc</div>
+<div id="my-hp">
+  <div class="row"><span class="nm" id="me-name">Bạn</span><span class="lvl">Lv.<span id="me-lvl">1</span> · <span id="me-title">Tân Binh</span></span></div>
+  <div class="hpbar" id="me-hpbar"><i id="me-hpfill"></i></div>
+  <div class="hpnum"><span id="me-hp">100</span>/<span id="me-hpmax">100</span> HP · ⚔️ <span id="me-dmg">10</span> DMG</div>
+</div>
+<div id="net-status">🔌 Chưa kết nối</div>
+<div id="kill-feed"></div>
+<div id="dead-overlay"><div class="big">💀 BẠN ĐÃ BỊ HẠ</div><div style="opacity:.85;margin-top:8px">Hồi sinh sau <span id="respawn-sec">5</span>s…</div></div>
+<div id="upg-panel" class="panel">
+  <button class="close" onclick="document.getElementById('upg-panel').classList.remove('on')">✕</button>
+  <h2>🪵 Nâng cấp sức mạnh</h2>
+  <div class="sub">Farm gỗ bằng cách bổ củi &amp; đốn cây, rồi đổi lấy sức mạnh. Củi hiện có: <b id="upg-wood">0</b> 🪵</div>
+  <div id="upg-list"></div>
+  <div class="note">💡 Mỗi cấp làm giá tăng lên. Đốn cây trong rừng cho nhiều gỗ hơn bổ củi.</div>
+</div>
+<div id="mp-panel" class="panel">
+  <button class="close" onclick="document.getElementById('mp-panel').classList.remove('on')">✕</button>
+  <h2>⚔️ Chơi mạng (PvP)</h2>
+  <div class="sub">Đấu rìu với bạn qua kết nối P2P. Một người tạo phòng, người kia nhập mã.</div>
+  <div id="mp-idle">
+    <button class="btn" id="mp-host">🏠 Tạo phòng (lấy mã)</button>
+    <button class="btn alt" id="mp-join-show">🔑 Nhập mã để vào phòng</button>
+  </div>
+  <div id="mp-hosting" style="display:none">
+    <div class="sub">Gửi mã này cho bạn của bạn:</div>
+    <div class="code" id="mp-code">····</div>
+    <div class="note">Đang chờ đối thủ kết nối… Giữ tab này mở.</div>
+  </div>
+  <div id="mp-joining" style="display:none">
+    <input id="mp-code-input" placeholder="Nhập mã phòng (VD: ABC123)" maxlength="12" autocomplete="off">
+    <button class="btn" id="mp-join-go">🚪 Vào phòng</button>
+  </div>
+  <div id="mp-msg" class="note" style="margin-top:8px"></div>
+  <div class="note" style="margin-top:10px">⚠️ Dùng broker công khai miễn phí của PeerJS. Nếu mạng có NAT/firewall chặt, kết nối có thể thất bại — thử lại hoặc đổi mạng.</div>
+</div>
+<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
 </script>
@@ -81,6 +157,30 @@ class AE{
 const audio=new AE();
 // ============== GAME STATE ==============
 const St={score:0,wood:0,chops:0,combo:0,maxCombo:0,canChop:!0,logHP:5,logMaxHP:5,lastChop:0,isChopping:!1};
+
+// ============== PROGRESSION (farm gỗ → nâng cấp sức mạnh) ==============
+// Wood is the currency. Every upgrade level raises a stat and the next price.
+const UPGRADES=[
+  {id:'dmg',   icon:'⚔️', name:'Lực chặt',    desc:'+3 sát thương mỗi cấp',        max:10, base:5,  step:4},
+  {id:'hp',    icon:'❤️', name:'Sinh lực',    desc:'+25 HP tối đa mỗi cấp',        max:10, base:6,  step:5},
+  {id:'speed', icon:'🏃', name:'Tốc độ',      desc:'+12% tốc chạy mỗi cấp',        max:8,  base:5,  step:4},
+  {id:'charge',icon:'⚡', name:'Tụ lực nhanh',desc:'Tụ lực nhanh hơn 10% mỗi cấp', max:8,  base:7,  step:5},
+  {id:'reach', icon:'📏', name:'Tầm với',     desc:'+0.35m tầm đánh mỗi cấp',      max:6,  base:8,  step:7},
+  {id:'crit',  icon:'💥', name:'Chí mạng',    desc:'+6% tỉ lệ chí mạng (x2) mỗi cấp',max:8,base:9,  step:6},
+];
+const Up={dmg:0,hp:0,speed:0,charge:0,reach:0,crit:0};
+const TITLES=['Tân Binh','Thợ Rừng','Tiều Phu','Phá Mộc','Cường Giả','Bá Vương Rừng Xanh'];
+const Me={hp:100,hpMax:100,dead:!1,respawn:0,name:'Bạn',kills:0,deaths:0};
+function upCost(u){return u.base+u.step*Up[u.id]}
+function totalLevels(){return UPGRADES.reduce((s,u)=>s+Up[u.id],0)}
+function playerLevel(){return 1+totalLevels()}
+function playerTitle(){return TITLES[Math.min(TITLES.length-1,Math.floor(totalLevels()/3))]}
+function baseDamage(){return 10+Up.dmg*3}
+function maxHP(){return 100+Up.hp*25}
+function moveSpeed(){return 3.2*(1+Up.speed*0.12)}
+function chargeTime(){return CHARGE_TIME*Math.pow(0.9,Up.charge)}
+function attackReach(){return 2.4+Up.reach*0.35}
+function critChance(){return Up.crit*0.06}
 
 // ============== RENDERER + SCENE ==============
 const sc=new T.Scene();
@@ -749,6 +849,54 @@ auraRing.rotation.x=Math.PI/2;auraRing.position.y=0.05;guy.add(auraRing);
 const auraLight=new T.PointLight(0xffcf40,0,6);auraLight.position.set(0,1.0,0);guy.add(auraLight);
 let auraLevel=0;   // smoothed 0..1 aura intensity
 
+// ============== REMOTE PLAYER AVATAR (multiplayer) ==============
+// A lighter-weight copy of the woodsman (no aura/axe model) used to draw the
+// opponent. Built on demand when a peer connects.
+function makeRemoteGuy(){
+  const g=new T.Group();
+  const rSkin=new T.MeshStandardMaterial({color:0xF5D6B8,roughness:.7});
+  const rShirt=new T.MeshStandardMaterial({color:0xC65B5B,roughness:.7});  // red shirt = enemy
+  const rPant=new T.MeshStandardMaterial({color:0x4a4a5f,roughness:.8});
+  const rHat=new T.MeshStandardMaterial({color:0x8a3a3a,roughness:.85});
+  const h=new T.Mesh(new T.SphereGeometry(.2,14,14),rSkin);h.position.y=1.12;h.castShadow=!0;g.add(h);
+  const bn=new T.Mesh(new T.SphereGeometry(.215,12,9,0,Math.PI*2,0,Math.PI*.55),rHat);bn.position.y=1.16;g.add(bn);
+  const to=new T.Mesh(new T.CylinderGeometry(.28,.34,.55,10),rShirt);to.position.y=.66;to.castShadow=!0;g.add(to);
+  const pt=new T.Mesh(new T.CylinderGeometry(.29,.24,.22,10),rPant);pt.position.y=.36;g.add(pt);
+  [-0.11,0.11].forEach(x=>{const l=new T.Mesh(new T.CylinderGeometry(.075,.06,.28,8),rPant);l.position.set(x,.15,0);g.add(l)});
+  // arms — the right one swings so you can read their attacks
+  const la=new T.Group();const lum=new T.Mesh(new T.CylinderGeometry(.06,.07,.34,8),rSkin);lum.position.y=-.17;la.add(lum);
+  la.position.set(-.32,.86,.05);la.rotation.set(-.5,0,-.35);g.add(la);
+  const ra=new T.Group();const rum=new T.Mesh(new T.CylinderGeometry(.065,.075,.36,8),rSkin);rum.position.y=-.18;ra.add(rum);
+  // simple stand-in axe for the remote player
+  const rax=new T.Group();
+  const rh=new T.Mesh(new T.CylinderGeometry(.026,.036,.8,8),new T.MeshStandardMaterial({color:0x6B4226,roughness:.9}));rh.position.y=-.34;rax.add(rh);
+  const rbl=new T.Mesh(new T.BoxGeometry(.06,.26,.3),new T.MeshStandardMaterial({color:0xb04a2a,metalness:.6,roughness:.35,emissive:0x5a1500,emissiveIntensity:.8}));
+  rbl.position.y=-.72;rax.add(rbl);
+  rax.position.set(0,-.36,.04);rax.rotation.set(-1.55,0,0);ra.add(rax);
+  ra.position.set(.32,.86,.05);g.add(ra);
+  // floating name + HP bar above the head (always faces camera)
+  const nameSpr=new T.Sprite(new T.SpriteMaterial({map:makeLabelTex('Đối thủ'),transparent:!0,depthTest:!1}));
+  nameSpr.scale.set(1.5,.38,1);nameSpr.position.y=1.85;g.add(nameSpr);
+  const hpBg=new T.Sprite(new T.SpriteMaterial({color:0x220000,transparent:!0,opacity:.75,depthTest:!1}));
+  hpBg.scale.set(1.2,.12,1);hpBg.position.y=1.62;g.add(hpBg);
+  const hpFg=new T.Sprite(new T.SpriteMaterial({color:0xff5544,transparent:!0,depthTest:!1}));
+  hpFg.scale.set(1.16,.09,1);hpFg.position.y=1.62;g.add(hpFg);
+  g.visible=!1;
+  return {grp:g,rArm:ra,axe:rax,nameSpr,hpFg,head:h};
+}
+// small canvas text label for names
+function makeLabelTex(txt){
+  const c=document.createElement('canvas');c.width=256;c.height=64;const x=c.getContext('2d');
+  x.fillStyle='rgba(0,0,0,0)';x.fillRect(0,0,256,64);
+  x.font='bold 34px Segoe UI,system-ui,sans-serif';x.textAlign='center';x.textBaseline='middle';
+  x.lineWidth=6;x.strokeStyle='rgba(0,0,0,.75)';x.strokeText(txt,128,34);
+  x.fillStyle='#fff';x.fillText(txt,128,34);
+  return new T.CanvasTexture(c);
+}
+const remote=makeRemoteGuy();sc.add(remote.grp);
+// remote state we interpolate toward
+const Rem={x:2.5,z:-2,yaw:0,hp:100,hpMax:100,connected:!1,name:'Đối thủ',armX:-0.55,chopping:!1,dead:!1,lvl:1};
+
 // player movement state
 const player={vx:0,vz:0};
 const keys={};
@@ -864,6 +1012,7 @@ const chargeFill=document.getElementById('charge-fill');
 const chargeLabel=document.getElementById('charge-label');
 function beginCharge(){
   if(!audio.ctx)audio.init();
+  if(Me.dead)return;
   if(!St.canChop||St.isChopping||charging)return;
   charging=!0;charge=0;
   chargeWrap.classList.add('on');
@@ -873,13 +1022,13 @@ function releaseCharge(){
   if(!charging)return;
   charging=!1;
   chargeWrap.classList.remove('on','full');
-  chargeStored=Math.min(1,charge/CHARGE_TIME);
+  chargeStored=Math.min(1,charge/chargeTime());
   St.canChop=!1;
   startChop();
 }
 function updateCharge(dt){
   // smooth the aura toward the charge level (fades out when not charging)
-  const target=charging?Math.min(1,charge/CHARGE_TIME):0;
+  const target=charging?Math.min(1,charge/chargeTime()):0;
   auraLevel+=(target-auraLevel)*Math.min(1,dt*8);
   const now=performance.now();
   if(auraLevel>0.01){
@@ -898,7 +1047,7 @@ function updateCharge(dt){
 
   if(!charging)return;
   charge+=dt;
-  const p=Math.min(1,charge/CHARGE_TIME);
+  const p=Math.min(1,charge/chargeTime());
   chargeFill.style.width=(p*100)+'%';
   chargeLabel.textContent=p>=1?'⚡ CỰC MẠNH!':'TỤ LỰC '+Math.round(p*100)+'%';
   chargeWrap.classList.toggle('full',p>=1);
@@ -921,6 +1070,9 @@ function landHit(){
   const fb=document.getElementById('chop-feedback');
   const chgTag=chg>0.66?'⚡ ':'';
 
+  // ===== PvP FIRST: a swing that reaches the opponent hits THEM instead =====
+  if(tryHitOpponent(baseDamage(),chg))return;
+
   if(chopTarget.type==='tree'){
     // ===== chopping a forest tree =====
     const tr=chopTarget.tree;
@@ -935,9 +1087,12 @@ function landHit(){
     if(tr.hp<=0&&!tr.dead){
       tr.dead=!0;tr.fall=0.0001;
       tr.fallAxis=new T.Vector3(Math.cos(GUY_YAW),0,-Math.sin(GUY_YAW)); // fall away from player
-      St.score+=15+Math.floor(St.combo*2);St.wood+=2;
+      St.score+=15+Math.floor(St.combo*2);
+      St.wood+=3+Math.floor(Up.dmg/3);              // felling a tree = best wood income
       audio.split();emitChipsAt(tr.x,0.4,tr.z,30,1.6);
       shedLeaves(tr.x,tr.cy,tr.z,tr.leafColor,26);  // burst of leaves as it dies
+      feed('🌲 Đốn hạ 1 cây! +'+(3+Math.floor(Up.dmg/3))+'🪵');
+      saveProgress();
     }else{St.score+=dmg}
     updateUI();return;
   }
@@ -953,10 +1108,11 @@ function landHit(){
   fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
   if(St.logHP<=0){
     St.score+=10+Math.floor(St.combo*2);
-    St.wood++;
+    St.wood+=1+Math.floor(Up.dmg/4);                // stronger axe → more wood per log
     audio.split();
     emitChips(42,2.3);
     splitLog();
+    saveProgress();
   }else{
     St.score+=dmg;
   }
@@ -966,7 +1122,7 @@ function landHit(){
 function updateChop(dt){
   // ---- CHARGING pose: arm cocks back further, axe grows & tilts blade DOWN ----
   if(charging){
-    const p=Math.min(1,charge/CHARGE_TIME);
+    const p=Math.min(1,charge/chargeTime());
     const e=easeOut(p);
     // levitate off the ground like a power-up, with a subtle hover bob
     guy.position.y=e*0.55+Math.sin(performance.now()*.006)*0.04*p;
@@ -1132,6 +1288,7 @@ addEventListener('wheel',e=>{if(povMode===7){orbitDist=Math.max(4,Math.min(16,or
 // fires a light chop.
 function tryChop(){
   if(!audio.ctx)audio.init();
+  if(Me.dead)return;
   if(!St.canChop||St.isChopping)return;
   const now=performance.now();
   if(now-(tryChop._last||0)<180)return;
@@ -1155,6 +1312,7 @@ addEventListener('pointerup',e=>{
 addEventListener('keydown',e=>{
   if(e.code==='Space'||e.key==='Enter'){e.preventDefault();if(!e.repeat)beginCharge()}
   else if(e.key==='f'||e.key==='F'){if(!e.repeat)tryChop()} // F = quick chop, no charge (A is used for strafing)
+  else if(e.key==='u'||e.key==='U'){if(!e.repeat)toggleUpg()} // U = upgrade shop
   else if(e.key==='q'||e.key==='Q'){cyclePOV()}
   else if(e.key>='1'&&e.key<='8'){povMode=(+e.key)-1;showPovLabel()}
   else if(e.key==='ArrowLeft'){povMode=7;orbitYaw+=0.15;showPovLabel()}
@@ -1182,6 +1340,259 @@ function updateUI(){
   document.getElementById('combo').textContent=St.combo;
   document.getElementById('max-combo').textContent=St.maxCombo;
   document.getElementById('log-hp-fill').style.width=(St.logHP/St.logMaxHP*100)+'%';
+  updateSelfHUD();
+}
+function updateSelfHUD(){
+  Me.hpMax=maxHP();
+  if(Me.hp>Me.hpMax)Me.hp=Me.hpMax;
+  const pct=Math.max(0,Me.hp/Me.hpMax*100);
+  document.getElementById('me-hpfill').style.width=pct+'%';
+  document.getElementById('me-hpbar').classList.toggle('low',pct<35);
+  document.getElementById('me-hp').textContent=Math.max(0,Math.ceil(Me.hp));
+  document.getElementById('me-hpmax').textContent=Me.hpMax;
+  document.getElementById('me-dmg').textContent=baseDamage();
+  document.getElementById('me-lvl').textContent=playerLevel();
+  document.getElementById('me-title').textContent=playerTitle();
+}
+
+// ---------- upgrade shop (farm gỗ → nâng cấp) ----------
+const upgPanel=document.getElementById('upg-panel');
+function renderUpgrades(){
+  document.getElementById('upg-wood').textContent=St.wood;
+  const list=document.getElementById('upg-list');
+  list.innerHTML='';
+  for(const u of UPGRADES){
+    const lv=Up[u.id], cost=upCost(u), maxed=lv>=u.max, afford=St.wood>=cost;
+    const row=document.createElement('div');row.className='up-row';
+    let pips='';for(let i=0;i<u.max;i++)pips+='<i class="'+(i<lv?'f':'')+'"></i>';
+    row.innerHTML='<div style="font-size:20px">'+u.icon+'</div>'+
+      '<div class="info"><div class="t">'+u.name+' <span style="opacity:.6;font-weight:400">Lv.'+lv+'/'+u.max+'</span></div>'+
+      '<div class="d">'+u.desc+'</div><div class="pips">'+pips+'</div></div>';
+    const btn=document.createElement('button');
+    btn.textContent=maxed?'MAX':('🪵 '+cost);
+    btn.disabled=maxed||!afford;
+    btn.onclick=()=>buyUpgrade(u);
+    row.appendChild(btn);
+    list.appendChild(row);
+  }
+}
+function buyUpgrade(u){
+  const cost=upCost(u);
+  if(Up[u.id]>=u.max||St.wood<cost)return;
+  St.wood-=cost;Up[u.id]++;
+  if(u.id==='hp'){Me.hpMax=maxHP();Me.hp+=25}      // grant the new HP immediately
+  audio.split();
+  const fb=document.getElementById('chop-feedback');
+  fb.textContent='⬆️ '+u.name+' Lv.'+Up[u.id];
+  fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
+  saveProgress();updateUI();renderUpgrades();netSend({t:'stats'});
+}
+function toggleUpg(){const on=upgPanel.classList.toggle('on');if(on)renderUpgrades()}
+document.getElementById('upg-btn').addEventListener('click',toggleUpg);
+
+// ---------- save / load progression ----------
+function saveProgress(){
+  try{localStorage.setItem('boCuiSave',JSON.stringify({Up,wood:St.wood,score:St.score,chops:St.chops,maxCombo:St.maxCombo,kills:Me.kills,deaths:Me.deaths}))}catch(e){}
+}
+function loadProgress(){
+  try{
+    const s=JSON.parse(localStorage.getItem('boCuiSave')||'null');
+    if(!s)return;
+    if(s.Up)for(const k in Up)if(typeof s.Up[k]==='number')Up[k]=s.Up[k];
+    St.wood=s.wood|0;St.score=s.score|0;St.chops=s.chops|0;St.maxCombo=s.maxCombo|0;
+    Me.kills=s.kills|0;Me.deaths=s.deaths|0;
+    Me.hpMax=maxHP();Me.hp=Me.hpMax;
+  }catch(e){}
+}
+
+// ---------- feedback helpers ----------
+function feed(html){
+  const f=document.getElementById('kill-feed');
+  const d=document.createElement('div');d.innerHTML=html;f.appendChild(d);
+  setTimeout(()=>d.remove(),4600);
+}
+function showDamage(amount,crit){
+  const fb=document.getElementById('chop-feedback');
+  fb.textContent=(crit?'💥 CHÍ MẠNG -':'⚔️ -')+amount;
+  fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
+}
+
+// ============== PvP COMBAT ==============
+// The ATTACKER resolves its own swing and tells the victim (authoritative-attacker
+// model — simple & responsive for 1v1). A swing lands if the opponent is inside
+// reach and roughly in front of us.
+function tryHitOpponent(dmgBase,chg){
+  if(!Rem.connected||Rem.dead||Me.dead)return !1;
+  const dx=remote.grp.position.x-guy.position.x, dz=remote.grp.position.z-guy.position.z;
+  const dist=Math.hypot(dx,dz);
+  if(dist>attackReach())return !1;
+  const toAng=Math.atan2(dx,dz);
+  const diff=Math.abs(((toAng-GUY_YAW+Math.PI*3)%(Math.PI*2))-Math.PI);
+  if(diff>1.5)return !1;                            // must be facing them (~±85°)
+  const crit=Math.random()<critChance();
+  const dmg=Math.round(dmgBase*(1+chg*1.2)*(crit?2:1));
+  Rem.hp=Math.max(0,Rem.hp-dmg);
+  showDamage(dmg,crit);
+  feed('⚔️ Bạn đánh <b>'+Rem.name+'</b> −'+dmg+(crit?' 💥':''));
+  netSend({t:'hit',dmg,crit});
+  emitChipsAt(remote.grp.position.x,1.0,remote.grp.position.z,10+Math.round(chg*14),1+chg);
+  if(Rem.hp<=0&&!Rem.dead){
+    Rem.dead=!0;Me.kills++;
+    St.wood+=5;St.score+=50;                        // bounty for a kill
+    feed('💀 Bạn đã hạ <b>'+Rem.name+'</b>! +5🪵 +50đ');
+    audio.split();saveProgress();
+  }
+  updateUI();return !0;
+}
+let lastHurt=0;
+function takeDamage(dmg,crit,fromName){
+  if(Me.dead)return;
+  lastHurt=performance.now();
+  Me.hp=Math.max(0,Me.hp-dmg);
+  feed('🩸 <b>'+(fromName||Rem.name)+'</b> đánh bạn −'+dmg+(crit?' 💥':''));
+  document.body.style.animation='shake .25s ease-out';setTimeout(()=>document.body.style.animation='',250);
+  emitChipsAt(guy.position.x,1.0,guy.position.z,8,1);
+  if(Me.hp<=0)die();
+  updateUI();netSend({t:'stats'});
+}
+function die(){
+  Me.dead=!0;Me.deaths++;Me.respawn=5;
+  document.getElementById('dead-overlay').classList.add('on');
+  feed('💀 Bạn đã bị hạ');
+  saveProgress();netSend({t:'died'});
+}
+function respawnMe(){
+  Me.dead=!1;Me.hp=maxHP();
+  const a=Math.random()*Math.PI*2, r=6+Math.random()*4;
+  guy.position.set(Math.cos(a)*r,0,Math.sin(a)*r);
+  document.getElementById('dead-overlay').classList.remove('on');
+  updateUI();netSend({t:'respawn',hp:Me.hp});netSend({t:'stats'});
+}
+function regen(dt){
+  if(Me.dead)return;
+  if(Me.hp<maxHP()&&performance.now()-lastHurt>4000){
+    Me.hp=Math.min(maxHP(),Me.hp+dt*(3+Up.hp));
+    updateSelfHUD();
+  }
+}
+function updateDeath(dt){
+  if(!Me.dead)return;
+  Me.respawn-=dt;
+  document.getElementById('respawn-sec').textContent=Math.max(0,Math.ceil(Me.respawn));
+  if(Me.respawn<=0)respawnMe();
+}
+
+// ============== MULTIPLAYER (PeerJS / WebRTC P2P) ==============
+let peer=null, conn=null, netRole=null;
+const netStatus=document.getElementById('net-status');
+const mpPanel=document.getElementById('mp-panel');
+function setNet(txt,show){netStatus.textContent=txt;netStatus.classList.toggle('on',show!==!1)}
+function mpMsg(t){document.getElementById('mp-msg').textContent=t}
+function roomCode(){let s='';const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';for(let i=0;i<6;i++)s+=A[Math.floor(Math.random()*A.length)];return s}
+const PEER_PREFIX='bocui3d-';
+function ensurePeer(id){
+  if(typeof Peer==='undefined'){mpMsg('❌ Không tải được PeerJS (kiểm tra mạng).');return null}
+  peer=id?new Peer(PEER_PREFIX+id):new Peer();
+  peer.on('error',e=>{
+    mpMsg('❌ Lỗi: '+(e.type==='unavailable-id'?'Mã phòng đã có người dùng, thử tạo lại.':e.type));
+    setNet('🔌 Lỗi kết nối',!0);
+  });
+  return peer;
+}
+function wireConn(c){
+  conn=c;
+  conn.on('open',()=>{
+    Rem.connected=!0;
+    setNet('🟢 Đã kết nối — PvP bật!',!0);
+    mpPanel.classList.remove('on');
+    remote.grp.visible=!0;
+    feed('🟢 Đối thủ đã kết nối!');
+    netSend({t:'hello',name:Me.name,hp:Me.hp,hpMax:maxHP(),lvl:playerLevel()});
+  });
+  conn.on('data',onNetData);
+  conn.on('close',()=>{
+    Rem.connected=!1;remote.grp.visible=!1;
+    setNet('🔌 Đối thủ đã ngắt kết nối',!0);feed('🔌 Đối thủ đã rời phòng');
+  });
+  conn.on('error',()=>{setNet('🔌 Lỗi kết nối',!0)});
+}
+function netSend(obj){
+  if(!conn||!conn.open)return;
+  try{
+    if(obj.t==='stats'){obj.hp=Me.hp;obj.hpMax=maxHP();obj.lvl=playerLevel();obj.dead=Me.dead}
+    conn.send(obj);
+  }catch(e){}
+}
+function onNetData(d){
+  if(!d||!d.t)return;
+  switch(d.t){
+    case 'hello':
+      Rem.name=d.name||'Đối thủ';Rem.hp=d.hp;Rem.hpMax=d.hpMax||100;Rem.lvl=d.lvl||1;
+      remote.nameSpr.material.map=makeLabelTex(Rem.name+' Lv.'+Rem.lvl);
+      remote.nameSpr.material.needsUpdate=!0;
+      netSend({t:'stats'});
+      break;
+    case 'pos':
+      Rem.x=d.x;Rem.z=d.z;Rem.yaw=d.yaw;Rem.armX=d.armX;Rem.chopping=!!d.ch;
+      break;
+    case 'hit':                                     // they hit US
+      takeDamage(d.dmg,d.crit,Rem.name);
+      break;
+    case 'stats':
+      Rem.hp=d.hp;Rem.hpMax=d.hpMax||100;Rem.dead=!!d.dead;Rem.lvl=d.lvl||Rem.lvl;
+      break;
+    case 'died':
+      Rem.dead=!0;feed('💀 <b>'+Rem.name+'</b> đã bị hạ');
+      break;
+    case 'respawn':
+      Rem.dead=!1;Rem.hp=d.hp||Rem.hpMax;
+      break;
+  }
+}
+document.getElementById('mp-btn').addEventListener('click',()=>mpPanel.classList.toggle('on'));
+document.getElementById('mp-host').addEventListener('click',()=>{
+  const code=roomCode();
+  document.getElementById('mp-idle').style.display='none';
+  document.getElementById('mp-hosting').style.display='block';
+  document.getElementById('mp-code').textContent=code;
+  mpMsg('Đang mở phòng…');netRole='host';
+  const p=ensurePeer(code);if(!p)return;
+  p.on('open',()=>{mpMsg('✅ Phòng đã mở. Chờ đối thủ…');setNet('🟡 Đang chờ đối thủ — mã '+code,!0)});
+  p.on('connection',c=>{mpMsg('✅ Đối thủ đang vào…');wireConn(c)});
+});
+document.getElementById('mp-join-show').addEventListener('click',()=>{
+  document.getElementById('mp-idle').style.display='none';
+  document.getElementById('mp-joining').style.display='block';
+});
+document.getElementById('mp-join-go').addEventListener('click',()=>{
+  const code=(document.getElementById('mp-code-input').value||'').trim().toUpperCase();
+  if(code.length<4){mpMsg('⚠️ Mã phòng không hợp lệ.');return}
+  mpMsg('Đang kết nối tới '+code+'…');setNet('🟡 Đang kết nối…',!0);netRole='guest';
+  const p=ensurePeer(null);if(!p)return;
+  p.on('open',()=>{wireConn(p.connect(PEER_PREFIX+code,{reliable:!0}))});
+});
+// stream our position ~15×/s
+let netTick=0;
+function netUpdate(dt){
+  if(!conn||!conn.open)return;
+  netTick+=dt;
+  if(netTick<0.066)return;netTick=0;
+  netSend({t:'pos',x:+guy.position.x.toFixed(2),z:+guy.position.z.toFixed(2),yaw:+GUY_YAW.toFixed(2),armX:+rArm.rotation.x.toFixed(2),ch:St.isChopping});
+}
+function updateRemote(dt){
+  if(!Rem.connected){remote.grp.visible=!1;return}
+  const g=remote.grp;
+  g.position.x+=(Rem.x-g.position.x)*Math.min(1,dt*10);
+  g.position.z+=(Rem.z-g.position.z)*Math.min(1,dt*10);
+  const dy=((Rem.yaw-g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+  g.rotation.y+=dy*Math.min(1,dt*10);
+  remote.rArm.rotation.x+=(Rem.armX-remote.rArm.rotation.x)*Math.min(1,dt*14);
+  const p=Math.max(0,Math.min(1,Rem.hp/(Rem.hpMax||100)));
+  remote.hpFg.scale.x=1.16*p;
+  remote.hpFg.material.color.setHex(p<0.35?0xff3333:0xff7744);
+  const targetY=Rem.dead?-0.7:0;
+  g.position.y+=(targetY-g.position.y)*Math.min(1,dt*4);
+  g.visible=!0;
 }
 
 // ============== PLAYER MOVEMENT + TARGET SELECTION ==============
@@ -1195,10 +1606,10 @@ function updatePlayer(dt,time){
   if(keys['s']){mx-=_fwd.x;mz-=_fwd.z}
   if(keys['d']){mx+=right.x;mz+=right.z}
   if(keys['a']){mx-=right.x;mz-=right.z}
-  const moving=(mx||mz)&&!St.isChopping;
+  const moving=(mx||mz)&&!St.isChopping&&!Me.dead;
   if(moving){
     const l=Math.hypot(mx,mz);mx/=l;mz/=l;
-    const spd=3.2;
+    const spd=moveSpeed();                          // upgraded by the speed perk
     let nx=guy.position.x+mx*spd*dt, nz=guy.position.z+mz*spd*dt;
     // keep inside the clearing ring, don't walk onto the block
     const rr=Math.hypot(nx,nz);
@@ -1213,27 +1624,36 @@ function updatePlayer(dt,time){
     guy.position.y+=(0-guy.position.y)*.2;
   }
 
-  // pick the closest choppable target in front of the player
+  // pick the closest choppable target in front of the player.
+  // An in-range OPPONENT outranks wood — you swing at them instead.
   let best=null,bestD=1e9;
   // the central log
   if(logGrp){const d=Math.hypot(guy.position.x-0,guy.position.z-0);if(d<bestD){bestD=d;best={type:'log'}}}
   for(const tr of trees){
     if(!tr.choppable||tr.dead)continue;
     const d=Math.hypot(guy.position.x-tr.x,guy.position.z-tr.z);
-    if(d<2.4&&d<bestD){bestD=d;best={type:'tree',tree:tr}}
+    if(d<attackReach()&&d<bestD){bestD=d;best={type:'tree',tree:tr}}
   }
   chopTarget=best||{type:'log'};
-  // when idle & not chopping, face the target
+  // is the opponent within striking distance?
+  let enemyD=1e9;
+  if(Rem.connected&&!Rem.dead){
+    enemyD=Math.hypot(guy.position.x-remote.grp.position.x,guy.position.z-remote.grp.position.z);
+  }
+  const enemyInRange=enemyD<=attackReach();
+  // when idle & not chopping, face the enemy if close, else the wood target
   if(!moving&&!St.isChopping){
     let ang;
-    if(chopTarget.type==='tree')ang=Math.atan2(chopTarget.tree.x-guy.position.x,chopTarget.tree.z-guy.position.z);
+    if(enemyInRange)ang=Math.atan2(remote.grp.position.x-guy.position.x,remote.grp.position.z-guy.position.z);
+    else if(chopTarget.type==='tree')ang=Math.atan2(chopTarget.tree.x-guy.position.x,chopTarget.tree.z-guy.position.z);
     else ang=Math.atan2(0-guy.position.x,0-guy.position.z);
     GUY_YAW=ang;
   }
   // update prompt label
   const pr=document.getElementById('target-label');
   if(pr){
-    if(chopTarget.type==='tree')pr.textContent='🌲 Bấm để đốn cây (HP '+Math.max(0,chopTarget.tree.hp)+')';
+    if(enemyInRange)pr.textContent='⚔️ Tấn công '+Rem.name+' (HP '+Math.max(0,Math.ceil(Rem.hp))+')';
+    else if(chopTarget.type==='tree')pr.textContent='🌲 Bấm để đốn cây (HP '+Math.max(0,chopTarget.tree.hp)+')';
     else pr.textContent='';
   }
 }
@@ -1251,6 +1671,10 @@ function loop(){
   updatePlayer(dt,time);
   updateCharge(dt);
   updateChop(dt);
+  regen(dt);
+  updateDeath(dt);
+  netUpdate(dt);
+  updateRemote(dt);
 
   // ===== DRAGON-FIRE axe trail (wide additive ribbon) =====
   if(trailOpacity>.02){
@@ -1418,10 +1842,13 @@ function loop(){
 }
 
 // ============== START ==============
+loadProgress();                 // restore farmed wood + upgrade levels
 spawnLog(!1);
 updateUI();
+setNet('🔌 Chưa kết nối — bấm "⚔️ Chơi mạng" để đấu với bạn',!1);
 cam.position.set(-6.5,4.2,6.5);
 loop();
+addEventListener('beforeunload',saveProgress);
 console.log('🌲 Bổ Củi Chill Guy 3D 🪓 — sẵn sàng!');
 </script>
 </body>
