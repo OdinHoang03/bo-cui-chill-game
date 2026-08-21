@@ -133,18 +133,19 @@ canvas{display:block}
 @keyframes floatUp{0%{transform:translate(-50%,-50%) scale(.5);opacity:1}100%{transform:translate(-50%,-150%) scale(1.3);opacity:0}}
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
 /* ===== leaderboard (bảng xếp hạng trong trận) ===== */
-#leaderboard{position:absolute;top:20px;right:20px;width:210px;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:9px 12px;color:#fff;font-size:12px;display:none}
+#leaderboard{position:absolute;top:20px;right:20px;width:230px;max-width:44vw;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:9px 12px;color:#fff;font-size:12px;display:none;box-sizing:border-box}
 #leaderboard.on{display:block}
 #leaderboard h3{font-size:12px;letter-spacing:.5px;opacity:.85;margin-bottom:7px;display:flex;align-items:center;gap:5px}
 #leaderboard .lb-row{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:8px;margin-bottom:3px;background:rgba(255,255,255,.05)}
 #leaderboard .lb-row.me{background:rgba(120,220,140,.18);border:1px solid rgba(120,220,140,.35)}
 #leaderboard .lb-row.dead{opacity:.45}
-#leaderboard .rk{width:16px;text-align:center;font-weight:800;opacity:.8}
-#leaderboard .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#leaderboard .rk{flex:0 0 auto;width:16px;text-align:center;font-weight:800;opacity:.8}
+#leaderboard .who{flex:1 1 auto;min-width:0}
+#leaderboard .who .nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #leaderboard .who small{opacity:.6;font-weight:400}
-#leaderboard .who .title{display:block;font-size:9.5px;font-weight:800;line-height:1.1;margin-top:1px;letter-spacing:.2px;text-shadow:0 1px 2px rgba(0,0,0,.5)}
-#leaderboard .who .title .crown{color:#ffdf6b}
-#leaderboard .kd{font-variant-numeric:tabular-nums;font-weight:700;font-size:11px}
+#leaderboard .who .title{display:flex;flex-wrap:wrap;align-items:center;gap:3px;font-size:9.5px;font-weight:800;line-height:1.15;margin-top:2px;letter-spacing:.2px;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+#leaderboard .who .title .crown{color:#ffdf6b;white-space:nowrap}
+#leaderboard .kd{flex:0 0 auto;font-variant-numeric:tabular-nums;font-weight:700;font-size:11px}
 #leaderboard .kd .k{color:#8ee6a0}#leaderboard .kd .d{color:#ff9a9a}
 /* kill-feed sits UNDER the leaderboard on the right */
 #kill-feed{top:200px}
@@ -165,7 +166,8 @@ canvas{display:block}
   #bottom-bar{bottom:auto;top:64px;left:50%;transform:translateX(-50%);flex-wrap:wrap;justify-content:center;max-width:96vw;gap:6px}
   #bottom-bar button{padding:7px 10px;font-size:12px}
   #my-hp{top:10px;left:10px;width:180px;font-size:11px;padding:6px 10px}
-  #leaderboard{top:10px;right:10px;width:150px;font-size:10px;padding:6px 9px}
+  #leaderboard{top:10px;right:10px;width:auto;max-width:58vw;min-width:150px;font-size:11px;padding:6px 9px}
+  #leaderboard .who .title{font-size:9px}
   #kill-feed{top:150px;right:10px;width:150px}
   #net-status{margin-top:118px;font-size:11px}
   #target-label{bottom:210px}
@@ -2948,11 +2950,11 @@ function renderLeaderboard(){
   document.getElementById('lb-list').innerHTML=rows.map((r,i)=>{
     const rk=rankTitle(r.k);                 // danh hiệu theo số hạ gục
     // người đứng đầu (còn sống & có kill) được thêm huy hiệu "Vua sàn đấu"
-    const top=(i===0&&r.k>0)?' <b class="crown">👑 Vua sàn đấu</b>':'';
+    const top=(i===0&&r.k>0)?'<b class="crown">👑 Vua sàn đấu</b>':'';
     return '<div class="lb-row'+(r.me?' me':'')+(r.dead?' dead':'')+'">'+
       '<span class="rk">'+(medal[i]||(i+1))+'</span>'+
-      '<span class="who">'+escapeHtml(r.name)+' <small>Lv.'+r.lvl+'</small>'+(r.waiting?' ⏳':(r.dead?' 💀':''))+
-        '<span class="title" style="color:'+rk.color+'">'+rk.icon+' '+rk.name+top+'</span></span>'+
+      '<span class="who"><span class="nm">'+escapeHtml(r.name)+' <small>Lv.'+r.lvl+'</small>'+(r.waiting?' ⏳':(r.dead?' 💀':''))+'</span>'+
+        '<span class="title" style="color:'+rk.color+'"><span>'+rk.icon+' '+rk.name+'</span>'+top+'</span></span>'+
       '<span class="kd"><span class="k">'+r.k+'</span>/<span class="d">'+r.d+'</span></span>'+
     '</div>';
   }).join('');
