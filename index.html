@@ -58,6 +58,7 @@ canvas{display:block}
 .panel .close{position:absolute;top:12px;right:14px;background:none;border:none;color:rgba(255,255,255,.6);font-size:20px;cursor:pointer}
 .up-row{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:9px 11px;margin-bottom:8px}
 .up-row .info{flex:1;min-width:0}
+.up-row button{flex:0 0 auto}
 .up-row .t{font-size:13px;font-weight:700}
 .up-row .d{font-size:11px;opacity:.65}
 .up-row .pips{display:flex;gap:3px;margin-top:4px}
@@ -107,7 +108,7 @@ canvas{display:block}
   <h2>🪵 Nâng cấp sức mạnh</h2>
   <div class="sub">Farm gỗ bằng cách bổ củi &amp; đốn cây, rồi đổi lấy sức mạnh. Củi hiện có: <b id="upg-wood">0</b> 🪵</div>
   <div id="upg-list"></div>
-  <div class="note">💡 Mỗi cấp làm giá tăng lên. Đốn cây trong rừng cho nhiều gỗ hơn bổ củi.</div>
+  <div class="note">💡 Mỗi cấp làm giá tăng lên. Đốn cây trong rừng cho nhiều gỗ hơn bổ củi. Nút mờ = chưa đủ gỗ (đưa chuột vào để xem còn thiếu bao nhiêu).</div>
 </div>
 <div id="name-panel" class="panel">
   <button class="close" onclick="document.getElementById('name-panel').classList.remove('on')">✕</button>
@@ -175,12 +176,12 @@ const St={score:0,wood:0,chops:0,combo:0,maxCombo:0,canChop:!0,logHP:5,logMaxHP:
 // ============== PROGRESSION (farm gỗ → nâng cấp sức mạnh) ==============
 // Wood is the currency. Every upgrade level raises a stat and the next price.
 const UPGRADES=[
-  {id:'dmg',   icon:'⚔️', name:'Lực chặt',    desc:'+3 sát thương mỗi cấp',        max:10, base:5,  step:4},
-  {id:'hp',    icon:'❤️', name:'Sinh lực',    desc:'+25 HP tối đa mỗi cấp',        max:10, base:6,  step:5},
-  {id:'speed', icon:'🏃', name:'Tốc độ',      desc:'+12% tốc chạy mỗi cấp',        max:8,  base:5,  step:4},
-  {id:'charge',icon:'⚡', name:'Tụ lực nhanh',desc:'Tụ lực nhanh hơn 10% mỗi cấp', max:8,  base:7,  step:5},
-  {id:'reach', icon:'📏', name:'Tầm với',     desc:'+0.35m tầm đánh mỗi cấp',      max:6,  base:8,  step:7},
-  {id:'crit',  icon:'💥', name:'Chí mạng',    desc:'+6% tỉ lệ chí mạng (x2) mỗi cấp',max:8,base:9,  step:6},
+  {id:'dmg',   icon:'⚔️', name:'Lực chặt',    desc:'+3 sát thương mỗi cấp',        max:10, base:4,  step:3},
+  {id:'hp',    icon:'❤️', name:'Sinh lực',    desc:'+25 HP tối đa mỗi cấp',        max:10, base:4,  step:3},
+  {id:'speed', icon:'🏃', name:'Tốc độ',      desc:'+12% tốc chạy mỗi cấp',        max:8,  base:4,  step:3},
+  {id:'charge',icon:'⚡', name:'Tụ lực nhanh',desc:'Tụ lực nhanh hơn 10% mỗi cấp', max:8,  base:5,  step:3},
+  {id:'reach', icon:'📏', name:'Tầm với',     desc:'+0.35m tầm đánh mỗi cấp',      max:6,  base:5,  step:4},
+  {id:'crit',  icon:'💥', name:'Chí mạng',    desc:'+6% tỉ lệ chí mạng (x2) mỗi cấp',max:8,base:6,  step:4},
 ];
 const Up={dmg:0,hp:0,speed:0,charge:0,reach:0,crit:0};
 const TITLES=['Tân Binh','Thợ Rừng','Tiều Phu','Phá Mộc','Cường Giả','Bá Vương Rừng Xanh'];
@@ -1400,6 +1401,9 @@ function renderUpgrades(){
     const btn=document.createElement('button');
     btn.textContent=maxed?'MAX':('🪵 '+cost);
     btn.disabled=maxed||!afford;
+    // show WHY it's locked so it never looks broken
+    if(maxed)btn.title='Đã đạt cấp tối đa';
+    else if(!afford)btn.title='Cần '+cost+' gỗ (còn thiếu '+(cost-St.wood)+')';
     btn.onclick=()=>buyUpgrade(u);
     row.appendChild(btn);
     list.appendChild(row);
