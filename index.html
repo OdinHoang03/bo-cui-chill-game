@@ -621,7 +621,7 @@ axe.add(axeFallback);
 //     toward the wood, the hand grip sits at the TOP (y=0),
 //   • AXE_EDGE_YAW spins the head so the sharp edge faces into the swing.
 const AXE_TARGET_LEN=1.05;
-let AXE_EDGE_YAW=0;           // tweak if the cutting edge needs to face forward
+let AXE_EDGE_YAW=Math.PI/2;   // rotate head 90° so the cutting edge faces the swing dir
 new GLTFLoader().load('lava_axe.glb',gltf=>{
   const model=gltf.scene;
   const holder=new T.Group();holder.add(model);
