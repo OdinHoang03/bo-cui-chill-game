@@ -1724,7 +1724,7 @@ const conns={};                      // peerId -> DataConnection (host holds man
 //   const SERVER_URL='wss://bo-cui-chill-server.ten-cua-ban.workers.dev';
 // Để trống ('') thì game tự dùng PeerJS P2P như cũ. Có thể tạm ghi đè bằng
 // ?server=wss://... trên URL để test mà không sửa file.
-let SERVER_URL='';
+let SERVER_URL='wss://bo-cui-chill-server.uka-pgr.workers.dev';
 try{const qs=new URLSearchParams(location.search);if(qs.get('server'))SERVER_URL=qs.get('server');else{const ls=localStorage.getItem('bocuiServer');if(ls)SERVER_URL=ls}}catch(e){}
 const USE_WS=!!SERVER_URL;           // true = dùng server Cloudflare
 let netMode=USE_WS?'ws':'p2p';
