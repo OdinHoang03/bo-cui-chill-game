@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌲 Bổ Củi Chill Guy 3D 🪓</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;background:#1a2a1a;font-family:'Segoe UI',system-ui,sans-serif}
+canvas{display:block}
+#ui{position:fixed;inset:0;pointer-events:none;z-index:10}
+#ui>*{pointer-events:auto}
+#score-display{position:absolute;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:10px 28px;color:#fff;text-align:center;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+#score-display .score-num{font-size:32px;font-weight:800;background:linear-gradient(135deg,#f6d365,#fda085);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+#score-display .label{opacity:.7}
+#score-display .stats{display:flex;gap:24px;margin-top:2px}
+#score-display .stats>div{font-size:13px;opacity:.8}
+#hint{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.4);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:8px 22px;color:rgba(255,255,255,.7);font-size:14px;transition:opacity .5s}
+#hint.hidden{opacity:0}
+#chop-feedback{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);font-size:64px;font-weight:900;pointer-events:none;opacity:0;text-shadow:0 0 30px rgba(255,200,50,.5)}
+#bottom-bar{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
+#bottom-bar button{background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 16px;color:#fff;font-size:14px;cursor:pointer;transition:all .2s}
+#bottom-bar button:hover{background:rgba(255,255,255,.15);transform:scale(1.05)}
+#bottom-bar button.active{background:rgba(100,200,100,.3);border-color:rgba(100,200,100,.5)}
+#music-btn{background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:50%;width:48px;height:48px;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+#music-btn:hover{background:rgba(255,255,255,.15);transform:scale(1.1)}
+#music-btn.off{opacity:.5}
+#wood-count{position:absolute;top:20px;right:20px;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:10px 20px;color:#fff;text-align:center;font-size:13px}
+#wood-count .num{font-size:28px;font-weight:700;color:#f6d365}
+#log-hp-bar{position:absolute;bottom:90px;left:50%;transform:translateX(-50%);width:200px;height:6px;background:rgba(0,0,0,.4);border-radius:3px;overflow:hidden;border:1px solid rgba(255,255,255,.1)}
+#log-hp-fill{height:100%;width:100%;background:linear-gradient(90deg,#f6d365,#fda085);border-radius:3px;transition:width .2s}
+#pov-label{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.5);font-size:12px;background:rgba(0,0,0,.3);padding:4px 12px;border-radius:8px;backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.05);transition:opacity .5s}
+#pov-label.hidden{opacity:0}
+#credit{position:absolute;bottom:6px;left:10px;color:rgba(255,255,255,.4);font-size:11px;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+@keyframes floatUp{0%{transform:translate(-50%,-50%) scale(.5);opacity:1}100%{transform:translate(-50%,-150%) scale(1.3);opacity:0}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+</style>
+</head>
+<body>
+<div id="ui">
+<div id="score-display"><div class="label">🌲 Gỗ thu hoạch</div><div class="score-num" id="score">0</div><div class="stats"><div>🪓 <span id="chop-count">0</span> nhát</div><div>🏆 <span id="combo">0</span> combo</div><div>🔥 <span id="max-combo">0</span> max</div></div></div>
+<div id="wood-count"><div>🪵 Củi</div><div class="num" id="wood">0</div></div>
+<div id="log-hp-bar"><div id="log-hp-fill"></div></div>
+<div id="chop-feedback">💥</div>
+<div id="pov-label" class="hidden">🎥 Người thứ 3</div>
+<div id="hint">🖱️ Click/Space: chặt • Kéo chuột: xoay (lên=trên xuống) • Q/1-8: đổi góc (3=góc nhìn thứ nhất)</div>
+<div id="bottom-bar"><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
+<div id="credit">⚡ Tạo bởi DeepSeek Harness</div>
+</div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+const T = THREE;
+// ============== AUDIO ENGINE ==============
+class AE{
+  constructor(){this.ctx=null;this.p=!1;this.mOn=!0;this.mg=null;this.bpm=75;this.bi=60/this.bpm;this.nb=0;this.bc=0}
+  init(){if(this.ctx)return;this.ctx=new(window.AudioContext||window.webkitAudioContext)();this.mg=this.ctx.createGain();this.mg.gain.value=.25;this.mg.connect(this.ctx.destination);this.p=!0;this.nb=this.ctx.currentTime+.2;this._l();this._a()}
+  toggle(){if(!this.ctx)this.init();this.mOn=!this.mOn;if(this.mg)this.mg.gain.linearRampToValueAtTime(this.mOn?.25:0,this.ctx.currentTime+.3);return this.mOn}
+  _l(){if(!this.p||!this.mOn)return;const n=this.ctx.currentTime;while(this.nb<n+.5){const t=this.nb,b=this.bc%8;if(b%2==0)this._k(t);if(b%4==2)this._s(t);this._h(t);if(b%2==0)this._ba(t);if(b==0)this._pa(t);this.bc++;this.nb+=this.bi/2}if(this.p)requestAnimationFrame(()=>this._l())}
+  _k(t){const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='sine';o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(40,t+.1);g.gain.setValueAtTime(.7,t);g.gain.exponentialRampToValueAtTime(.01,t+.12);o.connect(g);g.connect(this.mg);o.start(t);o.stop(t+.15)}
+  _s(t){const b=this.ctx.createBuffer(1,this.ctx.sampleRate*.1,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*.15));const s=this.ctx.createBufferSource(),g=this.ctx.createGain(),f=this.ctx.createBiquadFilter();s.buffer=b;g.gain.setValueAtTime(.5,t);g.gain.exponentialRampToValueAtTime(.01,t+.12);f.type='highpass';f.frequency.value=2e3;s.connect(f);f.connect(g);g.connect(this.mg);s.start(t)}
+  _h(t){const b=this.ctx.createBuffer(1,this.ctx.sampleRate*.03,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*.08));const s=this.ctx.createBufferSource(),g=this.ctx.createGain(),f=this.ctx.createBiquadFilter();s.buffer=b;g.gain.setValueAtTime(.2,t);g.gain.exponentialRampToValueAtTime(.01,t+.03);f.type='highpass';f.frequency.value=5e3;s.connect(f);f.connect(g);g.connect(this.mg);s.start(t)}
+  _ba(t){const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='triangle';o.frequency.setValueAtTime([65.41,73.42,82.41,73.42][this.bc%8>>1%4],t);g.gain.setValueAtTime(.3,t);g.gain.linearRampToValueAtTime(.1,t+.2);g.gain.exponentialRampToValueAtTime(.01,t+.4);o.connect(g);g.connect(this.mg);o.start(t);o.stop(t+.45)}
+  _pa(t){const c=[[261.63,329.63,392],[293.66,369.99,440],[329.63,392,493.88],[293.66,369.99,440]][Math.floor(this.bc/16)%4];c.forEach(f=>{const o=this.ctx.createOscillator(),g=this.ctx.createGain(),fi=this.ctx.createBiquadFilter();o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.06,t+.2);g.gain.linearRampToValueAtTime(.05,t+1.5);g.gain.linearRampToValueAtTime(0,t+2);fi.type='lowpass';fi.frequency.value=1200;o.connect(fi);fi.connect(g);g.connect(this.mg);o.start(t);o.stop(t+2.1)})}
+  _a(){if(!this.ctx)return;const b=this.ctx.createBuffer(1,this.ctx.sampleRate*3,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.min(1,i/(this.ctx.sampleRate*.5))*Math.max(0,1-i/d.length)*.3;const s=this.ctx.createBufferSource();s.buffer=b;s.loop=!0;const g=this.ctx.createGain(),f=this.ctx.createBiquadFilter();g.gain.value=.06;f.type='lowpass';f.frequency.value=600+Math.random()*200;s.connect(f);f.connect(g);g.connect(this.mg);s.start();setTimeout(()=>{const c=()=>{setTimeout(()=>{if(this.p)this._br();c()},3e3+Math.random()*8e3)};c()},2e3)}
+  _br(){[0,.03,.06].forEach(dl=>{const t=this.ctx.currentTime+dl;const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='sine';const f=1800+Math.random()*1200;o.frequency.setValueAtTime(f,t);o.frequency.linearRampToValueAtTime(f*1.3,t+.05);o.frequency.linearRampToValueAtTime(f*.8,t+.1);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.03,t+.02);g.gain.linearRampToValueAtTime(0,t+.12);o.connect(g);g.connect(this.mg);o.start(t);o.stop(t+.15)})}
+  chop(){if(!this.ctx||!this.mOn)return;const t=this.ctx.currentTime;const o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type='triangle';o.frequency.setValueAtTime(200,t);o.frequency.exponentialRampToValueAtTime(80,t+.08);g.gain.setValueAtTime(.5,t);g.gain.exponentialRampToValueAtTime(.01,t+.1);o.connect(g);g.connect(this.mg);o.start(t);o.stop(t+.12);const b=this.ctx.createBuffer(1,this.ctx.sampleRate*.05,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*.1));const s=this.ctx.createBufferSource(),g2=this.ctx.createGain();s.buffer=b;g2.gain.setValueAtTime(.4,t);g2.gain.exponentialRampToValueAtTime(.01,t+.06);s.connect(g2);g2.connect(this.mg);s.start(t)}
+  split(){if(!this.ctx||!this.mOn)return;const t=this.ctx.currentTime;const b=this.ctx.createBuffer(1,this.ctx.sampleRate*.25,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*.18))*.85;const s=this.ctx.createBufferSource(),g=this.ctx.createGain(),f=this.ctx.createBiquadFilter();s.buffer=b;g.gain.setValueAtTime(.8,t);g.gain.exponentialRampToValueAtTime(.01,t+.3);f.type='lowpass';f.frequency.setValueAtTime(3e3,t);f.frequency.exponentialRampToValueAtTime(400,t+.25);s.connect(f);f.connect(g);g.connect(this.mg);s.start(t);const o=this.ctx.createOscillator(),g2=this.ctx.createGain();o.type='sine';o.frequency.setValueAtTime(140,t);o.frequency.exponentialRampToValueAtTime(50,t+.2);g2.gain.setValueAtTime(.6,t);g2.gain.exponentialRampToValueAtTime(.01,t+.25);o.connect(g2);g2.connect(this.mg);o.start(t);o.stop(t+.3)}
+}
+const audio=new AE();
+// ============== GAME STATE ==============
+const St={score:0,wood:0,chops:0,combo:0,maxCombo:0,canChop:!0,logHP:5,logMaxHP:5,lastChop:0,isChopping:!1};
+
+// ============== RENDERER + SCENE ==============
+const sc=new T.Scene();
+sc.background=new T.Color(0x87CEEB);
+sc.fog=new T.Fog(0x87CEEB,30,75);
+const cam=new T.PerspectiveCamera(50,innerWidth/innerHeight,.1,120);
+const ren=new T.WebGLRenderer({antialias:!0});
+ren.setSize(innerWidth,innerHeight);
+ren.setPixelRatio(Math.min(devicePixelRatio,2));
+ren.shadowMap.enabled=!0;
+ren.shadowMap.type=T.PCFSoftShadowMap;
+ren.toneMapping=T.ACESFilmicToneMapping;
+ren.toneMappingExposure=1.15;
+document.body.prepend(ren.domElement);
+
+// ============== LIGHTING ==============
+sc.add(new T.AmbientLight(0x404060,.45));
+const sun=new T.DirectionalLight(0xffeedd,1.6);
+sun.position.set(12,20,8);
+sun.castShadow=!0;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.near=.5;sun.shadow.camera.far=45;
+sun.shadow.camera.left=-14;sun.shadow.camera.right=14;
+sun.shadow.camera.top=14;sun.shadow.camera.bottom=-14;
+sun.shadow.bias=-.0004;
+sc.add(sun);
+const fill=new T.DirectionalLight(0x8899ff,.3);fill.position.set(-10,6,-8);sc.add(fill);
+sc.add(new T.HemisphereLight(0x87CEEB,0x3a5f3a,.55));
+
+// ============== GROUND ==============
+const grnd=new T.Mesh(new T.PlaneGeometry(90,90),new T.MeshStandardMaterial({color:0x4a7c4a,roughness:.95}));
+grnd.rotation.x=-Math.PI/2;grnd.position.y=-.02;grnd.receiveShadow=!0;sc.add(grnd);
+// dirt clearing
+const clearing=new T.Mesh(new T.CircleGeometry(4.5,24),new T.MeshStandardMaterial({color:0x7a5c3a,roughness:1}));
+clearing.rotation.x=-Math.PI/2;clearing.position.y=.005;clearing.receiveShadow=!0;sc.add(clearing);
+
+// grass blades
+const gGeo=new T.CylinderGeometry(.02,.05,.22,3);
+for(let i=0;i<420;i++){
+  const bl=new T.Mesh(gGeo,new T.MeshStandardMaterial({color:new T.Color().setHSL(.25+Math.random()*.06,.6,.34+Math.random()*.15)}));
+  const a=Math.random()*Math.PI*2,r=5+Math.random()*16;
+  bl.position.set(Math.cos(a)*r,.08,Math.sin(a)*r);
+  bl.rotation.z=(Math.random()-.5)*.4;bl.rotation.x=(Math.random()-.5)*.4;
+  sc.add(bl);
+}
+
+// ============== TREES ==============
+function makeTree(x,z,s=1){
+  const grp=new T.Group();
+  const th=1.6+Math.random()*1.6*s;
+  const tr=new T.Mesh(new T.CylinderGeometry(.16*s,.26*s,th,6),new T.MeshStandardMaterial({color:0x6B4226,roughness:.9}));
+  tr.position.y=th/2;tr.castShadow=!0;tr.receiveShadow=!0;grp.add(tr);
+  const cs=.9+Math.random()*.8*s,cy=th+Math.random()*.3;
+  const cMat=new T.MeshStandardMaterial({color:new T.Color().setHSL(.28+Math.random()*.06,.5,.24+Math.random()*.1),roughness:.85});
+  const can=new T.Mesh(new T.SphereGeometry(cs,7,7),cMat);can.position.y=cy;can.scale.y=.85+Math.random()*.3;can.castShadow=!0;grp.add(can);
+  for(let i=0;i<3;i++){
+    const pf=new T.Mesh(new T.SphereGeometry(cs*(.45+Math.random()*.3),6,6),new T.MeshStandardMaterial({color:new T.Color().setHSL(.28+Math.random()*.06,.5,.3+Math.random()*.1),roughness:.85}));
+    pf.position.set((Math.random()-.5)*cs,cy+(Math.random()-.3)*cs*.5,(Math.random()-.5)*cs);pf.castShadow=!0;grp.add(pf);
+  }
+  grp.position.set(x,0,z);grp.rotation.y=Math.random()*Math.PI*2;
+  return grp;
+}
+const tPos=[];
+for(let i=0;i<42;i++){
+  let x,z,ok,tries=0;
+  do{const a=Math.random()*Math.PI*2,r=6+Math.random()*15;x=Math.cos(a)*r;z=Math.sin(a)*r;ok=!0;for(const[ox,oz]of tPos)if(Math.hypot(x-ox,z-oz)<1.8){ok=!1;break}tries++}while(!ok&&tries<20);
+  if(ok){tPos.push([x,z]);sc.add(makeTree(x,z,.7+Math.random()*.6))}
+}
+
+// floating pollen
+const pC=180,pGeo=new T.BufferGeometry(),pPos=new Float32Array(pC*3),pSpd=[];
+for(let i=0;i<pC;i++){const a=Math.random()*Math.PI*2,r=2+Math.random()*13;pPos[i*3]=Math.cos(a)*r;pPos[i*3+1]=.5+Math.random()*4.5;pPos[i*3+2]=Math.sin(a)*r;pSpd.push({x:(Math.random()-.5)*.003,y:.001+Math.random()*.003,z:(Math.random()-.5)*.003})}
+pGeo.setAttribute('position',new T.BufferAttribute(pPos,3));
+const pts=new T.Points(pGeo,new T.PointsMaterial({color:0xBFe89A,size:.07,transparent:!0,opacity:.55,sizeAttenuation:!0,blending:T.AdditiveBlending}));
+sc.add(pts);
+
+// ============== CHOPPING BLOCK (support stump) ==============
+const blockMat=new T.MeshStandardMaterial({color:0x7a5230,roughness:.95});
+const block=new T.Mesh(new T.CylinderGeometry(.7,.75,.5,12),blockMat);
+block.position.set(0,.25,0);block.castShadow=!0;block.receiveShadow=!0;sc.add(block);
+const blockTop=new T.Mesh(new T.CylinderGeometry(.68,.7,.04,12),new T.MeshStandardMaterial({color:0xB0844A,roughness:.7}));
+blockTop.position.set(0,.51,0);sc.add(blockTop);
+
+// ============== LOG (the wood to chop) — procedural detailed textures ==============
+// bark side texture: vertical fibrous streaks + noise
+function makeBarkTexture(){
+  const c=document.createElement('canvas');c.width=256;c.height=256;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,256,0);g.addColorStop(0,'#7a5330');g.addColorStop(.5,'#8a5f36');g.addColorStop(1,'#6e4a2a');
+  x.fillStyle=g;x.fillRect(0,0,256,256);
+  // vertical bark ridges
+  for(let i=0;i<70;i++){
+    const px=Math.random()*256;const w=1+Math.random()*3;
+    x.strokeStyle='rgba('+(40+Math.random()*40|0)+','+(28+Math.random()*24|0)+','+(14+Math.random()*14|0)+','+(0.25+Math.random()*0.5)+')';
+    x.lineWidth=w;x.beginPath();
+    let py=0,cx=px;while(py<256){cx+=(Math.random()-.5)*6;x.lineTo(cx,py);py+=8}
+    x.stroke();
+  }
+  // speckle
+  for(let i=0;i<2200;i++){x.fillStyle='rgba(0,0,0,'+Math.random()*0.12+')';x.fillRect(Math.random()*256,Math.random()*256,1,1)}
+  const t=new T.CanvasTexture(c);t.wrapS=t.wrapT=T.RepeatWrapping;return t;
+}
+// end-grain texture: concentric growth rings
+function makeEndTexture(){
+  const c=document.createElement('canvas');c.width=256;c.height=256;const x=c.getContext('2d');
+  x.fillStyle='#d9ae64';x.fillRect(0,0,256,256);
+  const cx=128,cy=128;
+  for(let rr=6;rr<150;rr+=4+Math.random()*5){
+    x.strokeStyle='rgba('+(150+Math.random()*40|0)+','+(110+Math.random()*30|0)+','+(50+Math.random()*30|0)+','+(0.35+Math.random()*0.4)+')';
+    x.lineWidth=1+Math.random()*1.8;x.beginPath();
+    for(let a=0;a<=Math.PI*2+0.1;a+=0.15){const rad=rr+Math.sin(a*3+rr)*1.5+Math.random()*1.2;x.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad)}
+    x.stroke();
+  }
+  // radial cracks in the grain
+  for(let i=0;i<7;i++){const a=Math.random()*Math.PI*2;x.strokeStyle='rgba(90,60,30,0.4)';x.lineWidth=1;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*140,cy+Math.sin(a)*140);x.stroke()}
+  const t=new T.CanvasTexture(c);return t;
+}
+// fibrous inner split-face texture: long vertical wood fibers (looks like fresh split wood)
+function makeSplitTexture(){
+  const c=document.createElement('canvas');c.width=128;c.height=256;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,128,0);g.addColorStop(0,'#c99a54');g.addColorStop(.5,'#e0b56a');g.addColorStop(1,'#c99a54');
+  x.fillStyle=g;x.fillRect(0,0,128,256);
+  for(let i=0;i<140;i++){
+    const px=Math.random()*128;
+    x.strokeStyle='rgba('+(150+Math.random()*60|0)+','+(110+Math.random()*40|0)+','+(50+Math.random()*30|0)+','+(0.2+Math.random()*0.5)+')';
+    x.lineWidth=0.5+Math.random()*1.5;x.beginPath();
+    let py=0,cx=px;while(py<256){cx+=(Math.random()-.5)*2;x.lineTo(cx,py);py+=12}
+    x.stroke();
+  }
+  const t=new T.CanvasTexture(c);return t;
+}
+const barkTex=makeBarkTexture(), endTex=makeEndTexture(), splitTex=makeSplitTexture();
+const barkBump=barkTex.clone();
+
+const woodMat=new T.MeshStandardMaterial({map:barkTex,color:0xB98A4C,roughness:.92,bumpMap:barkTex,bumpScale:.015});
+const woodEndMat=new T.MeshStandardMaterial({map:endTex,color:0xE8C888,roughness:.7});
+const splitMat=new T.MeshStandardMaterial({map:splitTex,color:0xE0B56A,roughness:.8});
+const barkMat=new T.MeshStandardMaterial({color:0x5E3F22,roughness:1});
+
+function makeLog(){
+  // upright log built from TWO half-cylinders on hinge pivots so it can
+  // progressively split open with each chop, then fully separate at the end.
+  const grp=new T.Group();
+  const h=0.72+Math.random()*0.55;         // varying height
+  const r=0.30+Math.random()*0.08;         // varying radius
+  grp.userData.h=h; grp.userData.r=r;
+  // per-log bark tint for variety
+  const tint=new T.Color().setHSL(0.08+Math.random()*0.04,0.45,0.42+Math.random()*0.08);
+
+  const mkHalf=(side)=>{
+    const pivot=new T.Group();             // pivot at the base (y=0)
+    const bm=woodMat.clone();bm.color=tint.clone();
+    // more radial segments = rounder + better texture wrap
+    const half=new T.Mesh(new T.CylinderGeometry(r,r+.025,h,24,4,!1,side>0?0:Math.PI,Math.PI),bm);
+    half.position.y=h/2;half.castShadow=!0;half.receiveShadow=!0;pivot.add(half);
+    // inner split face — starts hidden (behind seam), revealed only as it opens.
+    // Tinted to bark when closed so no bright seam line shows on an intact log.
+    const fMat=splitMat.clone();fMat.transparent=!0;fMat.opacity=0;
+    const face=new T.Mesh(new T.PlaneGeometry(r*1.98,h*0.99),fMat);
+    face.rotation.y=Math.PI/2;face.position.set(side>0?-0.006:0.006,h/2,0);pivot.add(face);
+    pivot.userData.face=fMat;
+    // top end-grain half with ring texture (inset slightly so the rim reads clean)
+    const top=new T.Mesh(new T.CircleGeometry(r*0.985,24,side>0?0:Math.PI,Math.PI),woodEndMat.clone());
+    top.position.y=h+.001;top.rotation.x=-Math.PI/2;pivot.add(top);
+    // subtle bottom cap
+    const bot=new T.Mesh(new T.CircleGeometry(r*0.985,24,side>0?0:Math.PI,Math.PI),woodEndMat.clone());
+    bot.position.y=0;bot.rotation.x=Math.PI/2;pivot.add(bot);
+    // raised bark ridges FLUSH on the curved side, kept away from the seam edges
+    for(let i=0;i<6;i++){
+      const a=(side>0?0.35:Math.PI+0.35)+(i/6)*(Math.PI-0.7);
+      const st=new T.Mesh(new T.BoxGeometry(.022,h*(0.7+Math.random()*0.12),.03+Math.random()*.02),barkMat);
+      st.position.set(Math.cos(a)*r,h/2+(Math.random()-.5)*.04,Math.sin(a)*r);st.rotation.y=-a;pivot.add(st);
+    }
+    // a couple of knots (kept off the seam)
+    if(Math.random()<0.6){
+      const knot=new T.Mesh(new T.SphereGeometry(.035+Math.random()*.025,8,6),new T.MeshStandardMaterial({color:0x4a3316,roughness:1}));
+      const a=(side>0?0.4:Math.PI+0.4)+Math.random()*(Math.PI-0.8);knot.position.set(Math.cos(a)*r*0.97,h*(0.25+Math.random()*0.5),Math.sin(a)*r*0.97);knot.scale.z=0.4;knot.rotation.y=-a;pivot.add(knot);
+    }
+    return pivot;
+  };
+  const L=mkHalf(-1),R=mkHalf(1);
+  grp.add(L,R);
+  grp.userData.L=L;grp.userData.R=R;
+  // container for accumulated chop grooves ("các đường bổ củi")
+  const grooves=new T.Group();grp.add(grooves);
+  grp.userData.grooves=grooves;
+  grp.userData.split=0;   // 0..1 how open the crack is
+  grp.userData.cuts=[];   // recorded impact points for coherent crack growth
+  return grp;
+}
+
+let logGrp=null;      // current live log group
+let logDrop=null;     // drop-in animation state
+const LOG_BASE_Y=0.53; // top of the chopping block
+
+function spawnLog(fromSky=!0){
+  logGrp=makeLog();
+  // each log needs a DIFFERENT number of chops
+  St.logMaxHP=3+Math.floor(Math.random()*5);   // 3..7
+  St.logHP=St.logMaxHP;
+  if(fromSky){
+    logGrp.position.set(0,LOG_BASE_Y+7,0);
+    logGrp.rotation.z=(Math.random()-.5)*.5;
+    logDrop={t:0,restY:LOG_BASE_Y,startY:LOG_BASE_Y+7,rotZ:logGrp.rotation.z};
+  }else{
+    logGrp.position.set(0,LOG_BASE_Y,0);
+  }
+  sc.add(logGrp);
+  updateUI();
+}
+
+// visually change the log on EVERY chop. IMPORTANT: every crack is drawn
+// on the ACTUAL split seam (the x=0 plane → front seam at +Z, back seam at
+// -Z, top seam along the Z diameter) so the wood cracks exactly where it will
+// finally break apart. Cracks accumulate & widen toward the full split.
+function applyChopVisual(hitY){
+  if(!logGrp)return;
+  const {h,r,L,R,grooves}=logGrp.userData;
+  const frac=1-St.logHP/St.logMaxHP;          // 0..1 progress
+  logGrp.userData.split=frac;
+
+  // (1) hinge the two halves apart along the seam — opens wider near the end.
+  // Reveal the inner split face as the gap grows (hidden while log is intact).
+  const ang=0.55*frac*frac;
+  L.userData.tRot=  ang;
+  R.userData.tRot= -ang;
+  if(L.userData.face)L.userData.face.opacity=Math.min(1,frac*1.6);
+  if(R.userData.face)R.userData.face.opacity=Math.min(1,frac*1.6);
+
+  // (2) impact height on the log
+  const localY=Math.max(.08,Math.min(h-.08,hitY-logGrp.position.y));
+  logGrp.userData.cuts.push(localY);
+
+  const darkMat=new T.MeshStandardMaterial({color:0x2a1c0a,roughness:1});
+  const innerMat=new T.MeshStandardMaterial({color:0x8a5f30,roughness:.9}); // exposed inner wood
+  const crackMat=new T.MeshBasicMaterial({color:0x140c03});
+
+  // (3) EACH CHOP carves its OWN axe notch at a DIFFERENT spot on the front
+  //     face, so repeated blows accumulate as many overlapping cuts. The
+  //     angle/height/tilt jitter per hit; notches persist in `grooves`.
+  const chopN=logGrp.userData.cuts.length;
+  const baseAng=(chopN%2? 0.35:-0.35)+(Math.random()-.5)*0.9; // wander across the front
+  const notchGrp=new T.Group();
+  // gouged wedge cut into the surface (darker recess + brighter inner wood)
+  const cutW=r*(0.9+Math.random()*0.7);
+  const recess=new T.Mesh(new T.BoxGeometry(cutW,.045+Math.random()*.03,.14),darkMat);
+  const inner =new T.Mesh(new T.BoxGeometry(cutW*0.8,.03,.10),innerMat);
+  inner.position.z=-0.02;
+  const lip   =new T.Mesh(new T.CylinderGeometry(.001,cutW*0.5,.10,3),new T.MeshStandardMaterial({color:0x241706,roughness:1}));
+  lip.rotation.x=Math.PI/2;lip.position.z=-0.03;
+  notchGrp.add(recess,inner,lip);
+  // seat the notch INTO the curved surface (recessed, not floating) at the
+  // chosen angle & height, tilted a bit for a hand-hewn look
+  notchGrp.position.set(Math.sin(baseAng)*r*0.9, localY+(Math.random()-.5)*0.06, Math.cos(baseAng)*r*0.9);
+  notchGrp.rotation.y=baseAng;
+  notchGrp.rotation.z=(Math.random()-.5)*0.6;   // varied blade angle
+  grooves.add(notchGrp);
+
+  // small hack splinters clinging around this fresh notch (stay on the log)
+  for(let s=0;s<2;s++){
+    const sp=new T.Mesh(new T.BoxGeometry(.02+Math.random()*.03,.015,.02),innerMat);
+    const a2=baseAng+(Math.random()-.5)*0.4;
+    sp.position.set(Math.sin(a2)*r*0.96, localY+(Math.random()-.5)*0.1, Math.cos(a2)*r*0.96);
+    sp.rotation.set(Math.random(),a2,Math.random());
+    grooves.add(sp);
+  }
+
+  // (4) jagged crack running vertically ALONG the seam from this impact.
+  //     These converge on the x=0 plane where the log finally splits.
+  const reach=(0.3+frac*0.6);
+  [1,-1].forEach(zside=>{
+    [-1,1].forEach(dir=>{
+      let y=localY, x=(Math.random()-.5)*r*0.12;
+      const segs=2+Math.floor(frac*4);
+      for(let s=0;s<segs;s++){
+        const len=(h*reach/segs)*(0.7+Math.random()*0.6);
+        const nx=x+(Math.random()-.5)*r*0.28;   // small lateral wander, stays near seam
+        const ny=y+dir*len;
+        const seg=new T.Mesh(new T.BoxGeometry(0.015+frac*0.02,Math.abs(ny-y)+0.03,0.02),crackMat);
+        seg.position.set((x+nx)/2,(y+ny)/2,zside*r*0.99);
+        seg.rotation.z=-Math.atan2(nx-x,ny-y);
+        grooves.add(seg);
+        x=nx*0.6;y=Math.max(0.03,Math.min(h-0.03,ny));
+      }
+    });
+  });
+
+  // (5) top end-grain crack: a line ALONG the seam (the Z diameter, x=0),
+  //     widening as the log opens. rotation.y = PI/2 aligns box length to Z.
+  if(logGrp.userData.topCrack)grooves.remove(logGrp.userData.topCrack);
+  const tc=new T.Mesh(new T.BoxGeometry(r*2*0.98,0.01,0.02+frac*0.14),new T.MeshBasicMaterial({color:0x140c03}));
+  tc.position.set(0,h+0.015,0);tc.rotation.y=Math.PI/2;
+  grooves.add(tc);logGrp.userData.topCrack=tc;
+
+  // (6) NOTE: no big wood pieces fly off during ordinary chops anymore.
+  // Only the small chip particles (emitChips, fired in landHit) puff out per
+  // hit. The real wood chunks are ejected at the moment of the final split.
+}
+
+// ============== FINAL SPLIT — pieces separate ALONG the crack seam ==============
+const flyingPieces=[];
+function makeHalf(side,h,r){
+  const grp=new T.Group();
+  const bm=woodMat.clone();
+  const half=new T.Mesh(new T.CylinderGeometry(r,r+.02,h,24,2,!1,side>0?0:Math.PI,Math.PI),bm);
+  half.position.y=h/2;half.castShadow=!0;grp.add(half);
+  // fresh ragged inner split face (fibrous)
+  const face=new T.Mesh(new T.PlaneGeometry(r*2,h),splitMat.clone());
+  face.rotation.y=Math.PI/2;face.position.set(side>0?-0.002:0.002,h/2,0);grp.add(face);
+  const top=new T.Mesh(new T.CircleGeometry(r,24,side>0?0:Math.PI,Math.PI),woodEndMat.clone());
+  top.position.y=h;top.rotation.x=-Math.PI/2;grp.add(top);
+  const bot=new T.Mesh(new T.CircleGeometry(r,24,side>0?0:Math.PI,Math.PI),woodEndMat.clone());
+  bot.position.y=0;bot.rotation.x=Math.PI/2;grp.add(bot);
+  return grp;
+}
+// small irregular chunk that breaks off along the crack (makes it look shattered,
+// not a clean 2-way cut)
+function makeChunk(h,r){
+  const ch=0.14+Math.random()*0.22;
+  const grp=new T.Group();
+  const m=new T.Mesh(new T.CylinderGeometry(r*(0.35+Math.random()*0.3),r*(0.3+Math.random()*0.3),ch,10,1,!1,Math.random()*Math.PI,Math.PI*(0.5+Math.random()*0.5)),woodMat.clone());
+  grp.add(m);
+  const face=new T.Mesh(new T.PlaneGeometry(r*0.9,ch),splitMat.clone());
+  face.rotation.y=Math.PI/2;grp.add(face);
+  return grp;
+}
+function splitLog(){
+  if(!logGrp)return;
+  const {h,r}=logGrp.userData;
+  const baseY=logGrp.position.y;
+  const rotZ=logGrp.rotation.z;
+  const cuts=logGrp.userData.cuts||[];
+  sc.remove(logGrp);
+  // the two main halves fly apart PERPENDICULAR to the seam (±X)
+  [-1,1].forEach(side=>{
+    const half=makeHalf(side,h,r);
+    half.position.set(side*0.02,baseY,0);half.rotation.z=rotZ;
+    sc.add(half);
+    flyingPieces.push({
+      mesh:half,
+      vel:{x:side*(2.3+Math.random()*1.2),y:2.7+Math.random()*1.2,z:(Math.random()-.5)*0.8},
+      angVel:{x:(Math.random()-.5)*4,y:(Math.random()-.5)*3,z:side*(4+Math.random()*4)},
+      life:2.8,grounded:!1,restY:r*0.55
+    });
+  });
+  // extra chunks break off exactly at the recorded crack heights, along the seam
+  const chunkYs = cuts.length ? cuts : [h*0.4,h*0.7];
+  chunkYs.slice(-3).forEach(cy=>{
+    const zside=Math.random()<.5?1:-1;
+    const chunk=makeChunk(h,r);
+    chunk.position.set(0,baseY+cy,zside*r*0.6);
+    sc.add(chunk);
+    flyingPieces.push({
+      mesh:chunk,
+      vel:{x:(Math.random()-.5)*2,y:2.2+Math.random()*1.5,z:zside*(1.2+Math.random()*1.5)},
+      angVel:{x:(Math.random()-.5)*10,y:(Math.random()-.5)*10,z:(Math.random()-.5)*10},
+      life:2.4,grounded:!1,restY:.05+Math.random()*.05
+    });
+  });
+  // burst of small splinters flung out ONLY at the split moment
+  for(let s=0;s<10;s++){
+    const sp=new T.Mesh(new T.BoxGeometry(.03+Math.random()*.04,.02,.02+Math.random()*.03),splitMat.clone());
+    sp.position.set((Math.random()-.5)*r,baseY+Math.random()*h,(Math.random()-.5)*r);
+    sc.add(sp);
+    const a=Math.random()*Math.PI*2,sp2=1.5+Math.random()*2.5;
+    flyingPieces.push({mesh:sp,vel:{x:Math.cos(a)*sp2,y:2+Math.random()*2.5,z:Math.sin(a)*sp2},angVel:{x:(Math.random()-.5)*14,y:(Math.random()-.5)*14,z:(Math.random()-.5)*14},life:1.6+Math.random()*0.8,grounded:!1,restY:.03});
+  }
+  logGrp=null;
+  setTimeout(()=>spawnLog(!0),750);
+}
+
+// ============== WOOD CHIP PARTICLES ==============
+const chipMax=60,chipGeo=new T.BufferGeometry(),chipPos=new Float32Array(chipMax*3),chipVel=[],chipLife=new Float32Array(chipMax);
+chipGeo.setAttribute('position',new T.BufferAttribute(chipPos,3));
+const chips=new T.Points(chipGeo,new T.PointsMaterial({color:0xD9AE64,size:.05,transparent:!0,opacity:.9,sizeAttenuation:!0}));
+chips.visible=!1;sc.add(chips);
+let chipActive=0;
+function emitChips(n,power){
+  chipActive=Math.min(chipMax,n);
+  const pa=chipGeo.getAttribute('position');
+  for(let i=0;i<chipActive;i++){
+    const a=Math.random()*Math.PI*2,sp=(.6+Math.random()*1.4)*power;
+    pa.array[i*3]=0;pa.array[i*3+1]=1.0;pa.array[i*3+2]=0;
+    chipVel[i]={x:Math.cos(a)*sp*.5,y:1.5+Math.random()*2.5,z:Math.sin(a)*sp*.5};
+    chipLife[i]=.6+Math.random()*.7;
+  }
+  pa.needsUpdate=!0;chips.visible=!0;
+}
+let chipTimer=0;
+
+// ============== CHILL GUY CHARACTER ==============
+const skin=new T.MeshStandardMaterial({color:0xF5D6B8,roughness:.7});
+const shirt=new T.MeshStandardMaterial({color:0x5BB985,roughness:.7});
+const pantM=new T.MeshStandardMaterial({color:0x46617F,roughness:.8});
+const hatM=new T.MeshStandardMaterial({color:0x7d5a3a,roughness:.85});
+const shoeM=new T.MeshStandardMaterial({color:0x33322f,roughness:.9});
+const steel=new T.MeshStandardMaterial({color:0x9a9a9a,metalness:.7,roughness:.3});
+const edge=new T.MeshStandardMaterial({color:0xd7d7d7,metalness:.85,roughness:.15});
+const handleM=new T.MeshStandardMaterial({color:0x6B4226,roughness:.9});
+
+const guy=new T.Group();
+
+// head
+const head=new T.Mesh(new T.SphereGeometry(.2,16,16),skin);head.position.y=1.12;head.castShadow=!0;guy.add(head);
+// beanie
+const beanie=new T.Mesh(new T.SphereGeometry(.215,14,10,0,Math.PI*2,0,Math.PI*.55),hatM);beanie.position.y=1.16;beanie.castShadow=!0;guy.add(beanie);
+const beanieBrim=new T.Mesh(new T.TorusGeometry(.2,.03,8,16),hatM);beanieBrim.position.y=1.13;beanieBrim.rotation.x=Math.PI/2;guy.add(beanieBrim);
+const pom=new T.Mesh(new T.SphereGeometry(.045,8,8),new T.MeshStandardMaterial({color:0xd85555}));pom.position.set(0,1.36,0);guy.add(pom);
+// sunglasses
+[-0.082,0.082].forEach(x=>{const l=new T.Mesh(new T.CylinderGeometry(.075,.075,.02,12),new T.MeshStandardMaterial({color:0x1a1a1a,metalness:.4,roughness:.3,transparent:!0,opacity:.85}));l.position.set(x,1.14,.185);l.rotation.x=Math.PI/2;guy.add(l)});
+const brdg=new T.Mesh(new T.BoxGeometry(.05,.02,.02),new T.MeshStandardMaterial({color:0x111}));brdg.position.set(0,1.14,.19);guy.add(brdg);
+// chill smile
+const smile=new T.Mesh(new T.TorusGeometry(.045,.014,6,10,Math.PI),new T.MeshStandardMaterial({color:0x5a3620}));smile.position.set(0,1.04,.19);smile.rotation.set(.15,0,Math.PI);guy.add(smile);
+// torso
+const torso=new T.Mesh(new T.CylinderGeometry(.28,.34,.55,10),shirt);torso.position.y=.66;torso.castShadow=!0;guy.add(torso);
+const collar=new T.Mesh(new T.CylinderGeometry(.3,.32,.05,10),shirt);collar.position.y=.9;guy.add(collar);
+// pants + legs
+const pantsMesh=new T.Mesh(new T.CylinderGeometry(.29,.24,.22,10),pantM);pantsMesh.position.y=.36;pantsMesh.castShadow=!0;guy.add(pantsMesh);
+[-0.11,0.11].forEach(x=>{
+  const leg=new T.Mesh(new T.CylinderGeometry(.075,.06,.28,8),pantM);leg.position.set(x,.15,0);leg.castShadow=!0;guy.add(leg);
+  const shoe=new T.Mesh(new T.SphereGeometry(.075,8,6),shoeM);shoe.position.set(x,.02,.05);shoe.scale.z=1.4;shoe.castShadow=!0;guy.add(shoe);
+});
+
+// LEFT arm (static-ish, helps hold)
+const lArm=new T.Group();
+const lUp=new T.Mesh(new T.CylinderGeometry(.06,.07,.34,8),skin);lUp.position.y=-.17;lUp.castShadow=!0;lArm.add(lUp);
+lArm.position.set(-.32,.86,.05);lArm.rotation.set(-.5,0,-.35);guy.add(lArm);
+
+// RIGHT arm (swings the axe) — pivot at shoulder
+const rArm=new T.Group();
+const rUp=new T.Mesh(new T.CylinderGeometry(.065,.075,.36,8),skin);rUp.position.y=-.18;rUp.castShadow=!0;rArm.add(rUp);
+const rHand=new T.Mesh(new T.SphereGeometry(.075,8,8),skin);rHand.position.y=-.37;rArm.add(rHand);
+
+// AXE — attached to right hand, points outward from the hand
+const axe=new T.Group();
+const haft=new T.Mesh(new T.CylinderGeometry(.028,.035,.72,8),handleM);haft.position.y=-.3;axe.add(haft);
+const headMetal=new T.Group();
+const cheek=new T.Mesh(new T.BoxGeometry(.12,.16,.06),steel);cheek.position.set(.02,0,0);headMetal.add(cheek);
+const bit=new T.Mesh(new T.BoxGeometry(.1,.2,.04),edge);bit.position.set(-.08,0,0);headMetal.add(bit);
+headMetal.position.set(0,-.62,0);axe.add(headMetal);
+// place axe in hand, angled
+axe.position.set(0,-.37,.02);axe.rotation.set(-1.9,0,0);
+rArm.add(axe);
+
+rArm.position.set(.32,.86,.05);
+guy.add(rArm);
+
+// place the woodsman and make him FACE the log at the origin.
+guy.position.set(-1.5,0,1.0);
+// forward (+Z local) should point from the guy toward the log (0,0,0)
+const GUY_YAW=Math.atan2(0-guy.position.x, 0-guy.position.z); // atan2(dx,dz)
+guy.rotation.y=GUY_YAW;
+guy.castShadow=!0;
+sc.add(guy);
+
+// approximate world tip of the axe bit for trail sampling
+const axeTipLocal=new T.Vector3(-.08,-.62,0);
+const _tmp=new T.Vector3();
+function axeTipWorld(){headMetal.getWorldPosition(_tmp);return _tmp.clone()}
+
+// ============== AXE MOTION TRAIL ==============
+const TRAIL_LEN=14;
+const trailGeo=new T.BufferGeometry();
+const trailPos=new Float32Array(TRAIL_LEN*3);
+trailGeo.setAttribute('position',new T.BufferAttribute(trailPos,3));
+const trail=new T.Line(trailGeo,new T.LineBasicMaterial({color:0xffffff,transparent:!0,opacity:0}));
+sc.add(trail);
+const trailPoints=[];
+let trailOpacity=0;
+
+// ============== CHOP ANIMATION — MANY DIRECTIONS ==============
+// rArm.rotation.x = vertical swing (overhead), .z = horizontal/side roll,
+// .y = twist. guy.rotation.y offset (yaw) lets him attack from angles.
+const ARM_IDLE=-0.55;
+const LARM_IDLE=-0.5;
+let chopT=0, chopPhase=-1;   // -1 idle, 0 windup, 1 swing, 2 recover
+let hitFired=!1;
+let curChop=null;
+// each style: up/down = arm.x windup/impact; rollUp/rollDn = arm.z (side swings);
+// twist = arm.y; yaw = body turn; lean = torso tilt; side = weight shift.
+const CHOP_STYLES=[
+  {name:'Bổ thẳng',     up:-2.35, down:0.55, rollUp:0,    rollDn:0,    twist:0,    yaw:0,     lean:0.16, side:0,    wind:0.16, swing:0.09, rec:0.22, dmg:1, chips:18},
+  {name:'Bổ mạnh',      up:-2.80, down:0.80, rollUp:0,    rollDn:0,    twist:0,    yaw:0,     lean:0.28, side:0,    wind:0.28, swing:0.075,rec:0.30, dmg:2, chips:32},
+  {name:'Bổ nhanh',     up:-1.80, down:0.40, rollUp:0,    rollDn:0,    twist:0,    yaw:0,     lean:0.10, side:0,    wind:0.07, swing:0.055,rec:0.13, dmg:1, chips:12},
+  {name:'Chém xéo trái',up:-2.30, down:0.55, rollUp:-0.5, rollDn:0.4,  twist:0.5,  yaw:0.28,  lean:0.16, side:0.22, wind:0.16, swing:0.085,rec:0.22, dmg:1, chips:22},
+  {name:'Chém xéo phải',up:-2.30, down:0.55, rollUp:0.5,  rollDn:-0.4, twist:-0.5, yaw:-0.28, lean:0.16, side:-0.22,wind:0.16, swing:0.085,rec:0.22, dmg:1, chips:22},
+  {name:'Chém ngang',   up:-0.30, down:0.20, rollUp:-1.5, rollDn:1.4,  twist:0.2,  yaw:0.18,  lean:0.05, side:0.3,  wind:0.18, swing:0.07, rec:0.24, dmg:1, chips:24, horizontal:!0},
+  {name:'Chém múc lên',  up:0.90, down:-0.90,rollUp:0.3,  rollDn:-0.3, twist:0,    yaw:-0.1,  lean:-0.12,side:0,    wind:0.20, swing:0.08, rec:0.26, dmg:1, chips:20, upper:!0},
+  {name:'Bổ đôi tay',   up:-2.95, down:0.90, rollUp:0,    rollDn:0,    twist:0,    yaw:0,     lean:0.34, side:0,    wind:0.32, swing:0.07, rec:0.32, dmg:2, chips:36, twoHand:!0},
+  {name:'Xoay người bổ', up:-2.6, down:0.7,  rollUp:0.2,  rollDn:-0.2, twist:0.3,  yaw:0.7,   lean:0.22, side:0,    wind:0.34, swing:0.08, rec:0.30, dmg:2, chips:30, spin:!0},
+];
+let lastStyleIdx=-1;
+function pickStyle(){
+  let idx;
+  if(St.combo>=4&&Math.random()<0.3)idx=8;          // spin finisher
+  else if(St.combo>=3&&Math.random()<0.35)idx=7;    // two-hand finisher
+  else{do{idx=Math.floor(Math.random()*7)}while(idx===lastStyleIdx)}
+  lastStyleIdx=idx;
+  return CHOP_STYLES[idx];
+}
+
+function startChop(){
+  curChop=pickStyle();
+  chopPhase=0;chopT=0;hitFired=!1;
+  St.isChopping=!0;
+  trailPoints.length=0;trailOpacity=0;
+  audio.chop();
+}
+
+function landHit(){
+  const c=curChop||CHOP_STYLES[0];
+  emitChips(c.chips,1+ (c.dmg-1)*0.6);
+  audio.chop();
+  St.chops++;
+  St.logHP-=c.dmg;
+  if(St.logHP<0)St.logHP=0;
+  const now=performance.now();
+  if(now-St.lastChop<1600)St.combo++;else St.combo=1;
+  St.lastChop=now;
+  if(St.combo>St.maxCombo)St.maxCombo=St.combo;
+  const tip=axeTipWorld();
+  applyChopVisual(tip.y);
+  if(logGrp){logGrp.userData.wob=.35+c.dmg*.12;logGrp.userData.wobDir=(c.side||0)!==0?Math.sign(-c.side):(Math.random()<.5?1:-1)}
+  const fb=document.getElementById('chop-feedback');
+  fb.textContent=St.logHP<=0?'🪵 BỔ ĐÔI!':(c.dmg>=2?'💪 '+c.name:(St.combo>=3?'🔥 x'+St.combo:'🪓 '+c.name));
+  fb.style.animation='none';void fb.offsetHeight;fb.style.animation='floatUp .8s ease-out';
+  const shakeMs=120+c.dmg*50;
+  document.body.style.animation='shake '+(shakeMs/1000)+'s ease-out';setTimeout(()=>document.body.style.animation='',shakeMs);
+  if(St.logHP<=0){
+    St.score+=10+Math.floor(St.combo*2);
+    St.wood++;
+    audio.split();
+    emitChips(42,2.3);
+    splitLog();
+  }else{
+    St.score+=c.dmg;
+  }
+  updateUI();
+}
+
+function updateChop(dt){
+  if(chopPhase<0){
+    // idle sway — arm relaxed holding axe, whole body faces the log
+    const s=Math.sin(performance.now()*.0015);
+    rArm.rotation.x=ARM_IDLE+s*.06; rArm.rotation.y=0; rArm.rotation.z=0;
+    lArm.rotation.x=LARM_IDLE+s*.04; lArm.rotation.z=-0.35;
+    guy.rotation.y=GUY_YAW+Math.sin(performance.now()*.0011)*.03;
+    guy.rotation.z=Math.sin(performance.now()*.0012)*.02;
+    return;
+  }
+  const c=curChop||CHOP_STYLES[0];
+  chopT+=dt;
+  if(chopPhase===0){ // windup
+    const p=Math.min(chopT/c.wind,1);const e=easeOut(p);
+    rArm.rotation.x=ARM_IDLE+(c.up-ARM_IDLE)*e;
+    rArm.rotation.z=(c.rollUp||0)*e;
+    rArm.rotation.y=(c.twist||0)*0.6*e;
+    guy.rotation.y=GUY_YAW+(c.yaw||0)*e;
+    guy.rotation.z=-c.lean*0.7*p + (c.side*0.4)*p;
+    if(c.twoHand){lArm.rotation.x=LARM_IDLE+(c.up*0.4-LARM_IDLE)*e;lArm.rotation.z=-0.15}
+    if(p>=1){chopPhase=1;chopT=0}
+  }else if(chopPhase===1){ // swing to impact (fast)
+    const p=Math.min(chopT/c.swing,1);const e=easeIn(p);
+    rArm.rotation.x=c.up+(c.down-c.up)*e;
+    rArm.rotation.z=(c.rollUp||0)+(((c.rollDn||0)-(c.rollUp||0)))*e;
+    rArm.rotation.y=(c.twist||0)*0.6*(1-e) - (c.twist||0)*0.4*e;
+    guy.rotation.y=GUY_YAW+(c.yaw||0)*(1-e*0.4);
+    guy.rotation.z=(-c.lean*0.7 + c.side*0.4)+(c.lean*0.9)*e;
+    if(c.twoHand){lArm.rotation.x=(c.up*0.4)+((-0.5)-(c.up*0.4))*e;lArm.rotation.z=-0.15+(-0.2)*e}
+    trailOpacity=.95;
+    if(p>=1&&!hitFired){hitFired=!0;landHit();chopPhase=2;chopT=0}
+  }else if(chopPhase===2){ // recover to idle facing log
+    const p=Math.min(chopT/c.rec,1);const e=easeOut(p);
+    rArm.rotation.x=c.down+(ARM_IDLE-c.down)*e;
+    rArm.rotation.z=(c.rollDn||0)*(1-e);
+    rArm.rotation.y=(-(c.twist||0)*0.4)*(1-e);
+    guy.rotation.y=GUY_YAW+(c.yaw||0)*0.6*(1-e);
+    guy.rotation.z=(c.lean*0.2+c.side*0.1)*(1-e);
+    if(c.twoHand){lArm.rotation.x=LARM_IDLE;lArm.rotation.z=-0.35}
+    trailOpacity*=.82;
+    if(p>=1){chopPhase=-1;St.isChopping=!1;St.canChop=!0}
+  }
+}
+function easeIn(t){return t*t*t}
+function easeOut(t){return 1-Math.pow(1-t,3)}
+
+// ============== POV CAMERA SYSTEM + FREE ROTATE ==============
+const POV_NAMES=['🎥 Người thứ 3','🎥 Qua vai','👁️ Góc nhìn thứ nhất','🎥 Trực diện','🎥 Từ trên xuống','🎥 Chéo trên cao','🎥 Điện ảnh','🎥 Tự do (kéo chuột)'];
+let povMode=0;
+const camTarget=new T.Vector3(0,.8,0);
+const camPos=new T.Vector3();
+const _eye=new T.Vector3(),_look=new T.Vector3();
+// orbit state for free-rotate mode (pitch can go from near-top to low)
+let orbitYaw=2.4, orbitPitch=0.6, orbitDist=9;
+let dragging=!1, lastX=0, lastY=0, dragMoved=0;
+function showPovLabel(){
+  const lbl=document.getElementById('pov-label');
+  lbl.textContent=POV_NAMES[povMode];lbl.classList.remove('hidden');
+  clearTimeout(showPovLabel._t);showPovLabel._t=setTimeout(()=>lbl.classList.add('hidden'),1800);
+}
+function cyclePOV(){povMode=(povMode+1)%POV_NAMES.length;showPovLabel()}
+function updateCamera(dt,time){
+  // FIRST-PERSON: mount the camera at the woodsman's eyes looking at the log.
+  // The axe (held in the right hand) naturally appears on the RIGHT of frame,
+  // the log sits in the CENTER. Snappy follow so swings feel visceral.
+  if(povMode===2){
+    head.getWorldPosition(_eye);
+    _eye.y+=0.12;                                  // just above the eyes
+    // pull the eye slightly back & left so the swinging axe stays in view on the right
+    const back=new T.Vector3(Math.sin(GUY_YAW),0,Math.cos(GUY_YAW)); // guy forward (+Z local)
+    const left=new T.Vector3(Math.sin(GUY_YAW+Math.PI/2),0,Math.cos(GUY_YAW+Math.PI/2));
+    _eye.addScaledVector(back,-0.05).addScaledVector(left,0.12);
+    cam.position.lerp(_eye,1-Math.pow(.00005,dt)); // very snappy
+    // look toward the log top, add a little bob during the swing
+    _look.set(0,0.55,0);
+    if(chopPhase===1)_look.y-=0.1;                 // head drops slightly on impact
+    camTarget.lerp(_look,1-Math.pow(.00008,dt));
+    cam.lookAt(camTarget);
+    return;
+  }
+  let tx,ty,tz, lx=0,ly=.7,lz=0;
+  if(povMode===0){ tx=-6.5;ty=4.2;tz=6.5; lx=-0.4;ly=.7;lz=0; }
+  else if(povMode===1){ const s=Math.sin(time*.05)*.15;tx=guy.position.x-1.4+s;ty=1.7;tz=guy.position.z+1.5;lx=0;ly=.7;lz=0; }
+  else if(povMode===3){ tx=0;ty=1.6;tz=5.2; lx=-.6;ly=.8;lz=.3; }
+  else if(povMode===4){ // TOP-DOWN — straight above the log looking down
+    tx=0.01;ty=8.5;tz=0.02; lx=0;ly=0.5;lz=0;
+  }
+  else if(povMode===5){ // high angled bird's-eye
+    const a=time*.12; tx=Math.cos(a)*4.5;ty=6.5;tz=Math.sin(a)*4.5; lx=0;ly=0.5;lz=0;
+  }
+  else if(povMode===6){ const a=time*.28,r=6.5;tx=Math.cos(a)*r;ty=3+Math.sin(time*.4)*1.2;tz=Math.sin(a)*r;lx=-.3;ly=.8;lz=0; }
+  else { // free orbit from user drag (pitch up to top-down)
+    tx=Math.sin(orbitYaw)*Math.cos(orbitPitch)*orbitDist;
+    ty=Math.sin(orbitPitch)*orbitDist;
+    tz=Math.cos(orbitYaw)*Math.cos(orbitPitch)*orbitDist;
+    lx=-.3;ly=.8;lz=0;
+  }
+  camPos.set(tx,ty,tz);
+  const lerpF = (povMode>=7) ? 1-Math.pow(.0005,dt) : 1-Math.pow(.001,dt);
+  cam.position.lerp(camPos,lerpF);
+  camTarget.lerp(new T.Vector3(lx,ly,lz),1-Math.pow(.002,dt));
+  cam.lookAt(camTarget);
+}
+// drag to rotate — auto-switches to free mode; pitch can reach top-down
+addEventListener('pointerdown',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn'))return;dragging=!0;lastX=e.clientX;lastY=e.clientY;dragMoved=0});
+addEventListener('pointermove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;
+  dragMoved+=Math.abs(dx)+Math.abs(dy);
+  if(dragMoved>6){
+    if(povMode!==7){povMode=7;showPovLabel()}
+    orbitYaw-=dx*0.008;
+    orbitPitch=Math.max(0.06,Math.min(1.52,orbitPitch+dy*0.006)); // up to ~straight down
+  }
+});
+addEventListener('pointerup',()=>{dragging=!1});
+addEventListener('wheel',e=>{if(povMode===7){orbitDist=Math.max(4,Math.min(16,orbitDist+Math.sign(e.deltaY)*0.6))}},{passive:!0});
+
+// ============== INPUT ==============
+function tryChop(){
+  if(!audio.ctx)audio.init();
+  if(!St.canChop||St.isChopping)return;
+  const now=performance.now();
+  if(now-(tryChop._last||0)<220)return;
+  tryChop._last=now;
+  St.canChop=!1;
+  startChop();
+  document.getElementById('hint').classList.add('hidden');
+}
+// click chops ONLY if the pointer didn't drag (dragging rotates the camera)
+addEventListener('click',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn'))return;if(dragMoved>6)return;tryChop()});
+addEventListener('keydown',e=>{
+  if(e.code==='Space'||e.key==='Enter'){e.preventDefault();tryChop()}
+  else if(e.key==='q'||e.key==='Q'){cyclePOV()}
+  else if(e.key>='1'&&e.key<='8'){povMode=(+e.key)-1;showPovLabel()}
+  else if(e.key==='ArrowLeft'){povMode=7;orbitYaw+=0.15;showPovLabel()}
+  else if(e.key==='ArrowRight'){povMode=7;orbitYaw-=0.15;showPovLabel()}
+  else if(e.key==='ArrowUp'){povMode=7;orbitPitch=Math.min(1.52,orbitPitch+0.12);showPovLabel()}
+  else if(e.key==='ArrowDown'){povMode=7;orbitPitch=Math.max(0.06,orbitPitch-0.12);showPovLabel()}
+});
+addEventListener('touchstart',e=>{if(e.target.closest('#bottom-bar')||e.target.closest('#music-btn'))return;},{passive:!0});
+
+document.getElementById('pov-btn').addEventListener('click',cyclePOV);
+document.getElementById('music-btn').addEventListener('click',()=>{const on=audio.toggle();const b=document.getElementById('music-btn');b.classList.toggle('off',!on);b.textContent=on?'🎵':'🔇'});
+
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();ren.setSize(innerWidth,innerHeight)});
+
+// ============== UI ==============
+function updateUI(){
+  document.getElementById('score').textContent=St.score;
+  document.getElementById('wood').textContent=St.wood;
+  document.getElementById('chop-count').textContent=St.chops;
+  document.getElementById('combo').textContent=St.combo;
+  document.getElementById('max-combo').textContent=St.maxCombo;
+  document.getElementById('log-hp-fill').style.width=(St.logHP/St.logMaxHP*100)+'%';
+}
+
+// ============== MAIN LOOP ==============
+const clock=new T.Clock();
+function loop(){
+  requestAnimationFrame(loop);
+  const dt=Math.min(clock.getDelta(),.05);
+  const time=clock.elapsedTime;
+
+  // idle head bob
+  head.position.y=1.12+Math.sin(time*.9)*.006;
+
+  updateChop(dt);
+
+  // axe trail
+  if(trailOpacity>.02){
+    trailPoints.unshift(axeTipWorld());
+    if(trailPoints.length>TRAIL_LEN)trailPoints.pop();
+    for(let i=0;i<TRAIL_LEN;i++){
+      const pnt=trailPoints[Math.min(i,trailPoints.length-1)]||axeTipWorld();
+      trailPos[i*3]=pnt.x;trailPos[i*3+1]=pnt.y;trailPos[i*3+2]=pnt.z;
+    }
+    trailGeo.attributes.position.needsUpdate=!0;
+    trail.material.opacity=trailOpacity;
+  }else{trail.material.opacity=0;trailPoints.length=0}
+
+  // log drop-in animation
+  if(logDrop&&logGrp){
+    logDrop.t+=dt;
+    const p=Math.min(logDrop.t/.5,1);
+    const eb=1-Math.pow(1-p,4);
+    logGrp.position.y=logDrop.startY+(logDrop.restY-logDrop.startY)*eb;
+    logGrp.rotation.z=logDrop.rotZ*(1-eb);
+    if(p>=1){
+      logGrp.position.y=logDrop.restY;logGrp.rotation.z=0;
+      // small squash on landing
+      logGrp.scale.y=1.12;logGrp.userData.squash=1;
+      logDrop=null;
+      // dust
+      emitChips(14,.8);
+      audio.chop();
+    }
+  }
+  // log landing squash recovery
+  if(logGrp&&logGrp.userData.squash){
+    logGrp.scale.y+=(1-logGrp.scale.y)*.2;
+    if(Math.abs(logGrp.scale.y-1)<.01){logGrp.scale.y=1;logGrp.userData.squash=0}
+  }
+  // log wobble after hit
+  if(logGrp&&logGrp.userData.wob){
+    logGrp.userData.wob*=.86;
+    logGrp.rotation.z=Math.sin(time*40)*logGrp.userData.wob*.12*(logGrp.userData.wobDir||1);
+    if(logGrp.userData.wob<.01){logGrp.userData.wob=0;logGrp.rotation.z=0}
+  }
+  // progressive hinge-open of the two log halves as it gets chopped
+  if(logGrp&&logGrp.userData.L){
+    const L=logGrp.userData.L,R=logGrp.userData.R;
+    const tl=L.userData.tRot||0, tr=R.userData.tRot||0;
+    L.rotation.z+=(tl-L.rotation.z)*.18;
+    R.rotation.z+=(tr-R.rotation.z)*.18;
+  }
+
+  // flying split halves physics
+  for(let i=flyingPieces.length-1;i>=0;i--){
+    const f=flyingPieces[i];
+    f.life-=dt;
+    if(!f.grounded){
+      f.vel.y-=11*dt; // gravity
+      f.mesh.position.x+=f.vel.x*dt;
+      f.mesh.position.y+=f.vel.y*dt;
+      f.mesh.position.z+=f.vel.z*dt;
+      f.mesh.rotation.x+=f.angVel.x*dt;
+      f.mesh.rotation.y+=f.angVel.y*dt;
+      f.mesh.rotation.z+=f.angVel.z*dt;
+      if(f.mesh.position.y<=f.restY){
+        f.mesh.position.y=f.restY;
+        f.grounded=!0;
+        // settle to lying-down orientation
+        f.targetRotX=Math.PI/2*(Math.random()<.5?1:-1);
+        f.targetRotZ=(Math.random()-.5)*.6;
+        f.vel.x*=.3;f.vel.z*=.3;
+        if(Math.abs(f.vel.y)>2)emitChips(8,.6);
+      }
+    }else{
+      // roll to rest & drift slightly
+      f.mesh.position.x+=f.vel.x*dt;
+      f.mesh.position.z+=f.vel.z*dt;
+      f.vel.x*=.9;f.vel.z*=.9;
+      f.mesh.rotation.x+=(f.targetRotX-f.mesh.rotation.x)*.12;
+      f.mesh.rotation.z+=(f.targetRotZ-f.mesh.rotation.z)*.12;
+    }
+    if(f.life<=0){
+      // fade & remove
+      f.mesh.traverse(o=>{if(o.material){o.material.transparent=!0;o.material.opacity=(o.material.opacity??1)-dt*2}});
+      if(f.life<-.6){sc.remove(f.mesh);flyingPieces.splice(i,1)}
+    }
+  }
+
+  // wood chips physics
+  if(chips.visible){
+    chipTimer+=dt;
+    const pa=chipGeo.getAttribute('position');let alive=!1;
+    for(let i=0;i<chipActive;i++){
+      if(chipLife[i]>0){
+        chipLife[i]-=dt;
+        chipVel[i].y-=9*dt;
+        pa.array[i*3]+=chipVel[i].x*dt;
+        pa.array[i*3+1]+=chipVel[i].y*dt;
+        pa.array[i*3+2]+=chipVel[i].z*dt;
+        if(pa.array[i*3+1]<0)pa.array[i*3+1]=0;
+        if(chipLife[i]>0)alive=!0;
+      }
+    }
+    pa.needsUpdate=!0;
+    if(!alive){chips.visible=!1;chipTimer=0}
+  }
+
+  // pollen drift
+  const pp=pGeo.getAttribute('position');
+  for(let i=0;i<pC;i++){
+    pp.array[i*3]+=pSpd[i].x;pp.array[i*3+1]+=pSpd[i].y+Math.sin(time+i)*.001;pp.array[i*3+2]+=pSpd[i].z;
+    if(pp.array[i*3+1]>5.2)pp.array[i*3+1]=.4;
+    if(pp.array[i*3]>15)pp.array[i*3]=-15;if(pp.array[i*3]<-15)pp.array[i*3]=15;
+    if(pp.array[i*3+2]>15)pp.array[i*3+2]=-15;if(pp.array[i*3+2]<-15)pp.array[i*3+2]=15;
+  }
+  pp.needsUpdate=!0;
+
+  updateCamera(dt,time);
+  ren.render(sc,cam);
+}
+
+// ============== START ==============
+spawnLog(!1);
+updateUI();
+cam.position.set(-6.5,4.2,6.5);
+loop();
+console.log('🌲 Bổ Củi Chill Guy 3D 🪓 — sẵn sàng!');
+</script>
+</body>
+</html>
