@@ -615,36 +615,62 @@ const axeFallback=new T.Group();
 axe.add(axeFallback);
 
 // ---- load the real lava-axe model ----
-// Tuning constants (easy to tweak): target haft length in world units, and an
-// orientation so the blade edge leads the downswing.
+// AUTO-ORIENT from geometry so it doesn't matter how the file was exported:
+//   • longest axis → vertical (the handle runs down the arm),
+//   • the heavy blade "head" (wider horizontal cross-section) → points DOWN (-Y)
+//     toward the wood, the hand grip sits at the TOP (y=0),
+//   • AXE_EDGE_YAW spins the head so the sharp edge faces into the swing.
 const AXE_TARGET_LEN=1.05;
+let AXE_EDGE_YAW=0;           // tweak if the cutting edge needs to face forward
 new GLTFLoader().load('lava_axe.glb',gltf=>{
   const model=gltf.scene;
-  // recenter & measure
-  const box=new T.Box3().setFromObject(model);
-  const size=new T.Vector3();box.getSize(size);
-  const center=new T.Vector3();box.getCenter(center);
-  model.position.sub(center);                       // center at origin
-  // wrap so we can orient the longest axis (the handle) along local Y
   const holder=new T.Group();holder.add(model);
-  // longest dimension = handle length
+  const tmpBox=()=>{holder.updateMatrixWorld(!0);return new T.Box3().setFromObject(model)};
+
+  // 1) center the model at the holder origin
+  let box=tmpBox();const center=new T.Vector3();box.getCenter(center);
+  model.position.sub(center);
+
+  // 2) rotate the LONGEST axis to vertical (Y)
+  box=tmpBox();const size=new T.Vector3();box.getSize(size);
   const dims=[['x',size.x],['y',size.y],['z',size.z]].sort((a,b)=>b[1]-a[1]);
-  const longAxis=dims[0][0], longLen=dims[0][1];
-  if(longAxis==='z')holder.rotation.x=-Math.PI/2;   // Z → Y
-  else if(longAxis==='x')holder.rotation.z=Math.PI/2; // X → Y
-  // scale to target haft length
-  const s=AXE_TARGET_LEN/longLen;holder.scale.setScalar(s);
-  // after orienting, drop it so the hand grips the top and the head hangs down (-Y)
-  holder.position.y=-AXE_TARGET_LEN*0.5;
-  // brighten emissive lava so the glowing cracks read in-scene
-  model.traverse(o=>{if(o.isMesh){o.castShadow=!0;const m=o.material;if(m){m.emissive=new T.Color(0xff5a1e);m.emissiveIntensity=0.0;
-    // if the base texture encodes lava, use it as emissive map too for a glow
-    if(m.map){m.emissiveMap=m.map;m.emissiveIntensity=0.9;}
+  const longAxis=dims[0][0];
+  if(longAxis==='z')model.rotation.x=-Math.PI/2;
+  else if(longAxis==='x')model.rotation.z=-Math.PI/2;
+
+  // 3) decide which end is the HEAD (larger horizontal cross-section) and make
+  //    it hang DOWN. Sample vertices in true world space (matrices forced fresh).
+  holder.updateMatrixWorld(!0);
+  box=new T.Box3().setFromObject(model);
+  const yMid=(box.min.y+box.max.y)/2;
+  let topW=0,botW=0,topN=0,botN=0;const va=new T.Vector3();
+  model.traverse(o=>{if(o.isMesh&&o.geometry&&o.geometry.attributes.position){
+    const pos=o.geometry.attributes.position;
+    for(let i=0;i<pos.count;i+=7){
+      va.fromBufferAttribute(pos,i);o.localToWorld(va);
+      const w=Math.abs(va.x)+Math.abs(va.z);
+      if(va.y>yMid){topW+=w;topN++;}else{botW+=w;botN++;}
+    }
+  }});
+  const topAvg=topN?topW/topN:0, botAvg=botN?botW/botN:0;
+  if(topAvg>botAvg)model.rotation.z+=Math.PI;     // wide head is up → flip it down
+  model.rotation.y+=AXE_EDGE_YAW;
+
+  // 4) scale to target length & seat so grip=top(0), head hangs to -Y
+  box=tmpBox();box.getSize(size);
+  model.scale.setScalar(AXE_TARGET_LEN/size.y);
+  box=tmpBox();
+  model.position.y-=box.max.y;                     // top of the model at y=0
+
+  // 5) glowing lava emissive
+  model.traverse(o=>{if(o.isMesh){o.castShadow=!0;const m=o.material;if(m){
+    m.emissive=new T.Color(0xff5a1e);
+    if(m.map){m.emissiveMap=m.map;m.emissiveIntensity=0.9;}else{m.emissiveIntensity=0.0;}
     m.needsUpdate=!0;}}});
+
   axe.remove(axeFallback);
   axe.add(holder);
   axeModelHolder=holder;
-  // place markers at the ends of the fitted model
   grip.position.set(0,0,0);
   edgeStrip.position.set(0,-AXE_TARGET_LEN,0);
 },undefined,err=>{console.warn('lava_axe.glb load failed, keeping fallback axe',err)});
