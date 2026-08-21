@@ -617,13 +617,18 @@ bladeShape2.closePath();
 const bladeGeo=new T.ExtrudeGeometry(bladeShape2,{depth:0.30,bevelEnabled:!1});
 bladeGeo.translate(0,0,-0.15);     // center along X (extrude runs +Z→rotate)
 bladeGeo.rotateY(Math.PI/2);       // lay the width along X
+// group the blade + honed edge so we can rotate the whole cutting head 90°:
+// the keen edge now points STRAIGHT DOWN to the ground for an accurate chop.
+const bladeAssembly=new T.Group();
 const bladeShape=new T.Mesh(bladeGeo,edge);
-bladeShape.position.set(0,-.02,0);headMetal.add(bladeShape);
+bladeShape.position.set(0,-.02,0);bladeAssembly.add(bladeShape);
 // slight flare cheeks so it reads as an axe bit
-const cheekL=new T.Mesh(new T.BoxGeometry(.05,.12,.09),steel);cheekL.position.set(0,-.02,0);headMetal.add(cheekL);
+const cheekL=new T.Mesh(new T.BoxGeometry(.05,.12,.09),steel);cheekL.position.set(0,-.02,0);bladeAssembly.add(cheekL);
 // bright honed cutting edge — a thin sharp bar at the very tip (-Y)
 const edgeStrip=new T.Mesh(new T.BoxGeometry(.33,.012,.012),new T.MeshStandardMaterial({color:0xffffff,metalness:.95,roughness:.05}));
-edgeStrip.position.set(0,-.27,0);headMetal.add(edgeStrip);
+edgeStrip.position.set(0,-.27,0);bladeAssembly.add(edgeStrip);
+bladeAssembly.rotation.z=Math.PI/2;   // rotate blade 90° → edge/mũi faces down to the ground
+headMetal.add(bladeAssembly);
 headMetal.position.set(0,-.7,0);axe.add(headMetal);
 // seat the axe in the hand: haft angled forward so the blade leads the swing
 axe.position.set(0,-.36,.04);
