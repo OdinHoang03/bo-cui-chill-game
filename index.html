@@ -142,6 +142,8 @@ canvas{display:block}
 #leaderboard .rk{width:16px;text-align:center;font-weight:800;opacity:.8}
 #leaderboard .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #leaderboard .who small{opacity:.6;font-weight:400}
+#leaderboard .who .title{display:block;font-size:9.5px;font-weight:800;line-height:1.1;margin-top:1px;letter-spacing:.2px;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+#leaderboard .who .title .crown{color:#ffdf6b}
 #leaderboard .kd{font-variant-numeric:tabular-nums;font-weight:700;font-size:11px}
 #leaderboard .kd .k{color:#8ee6a0}#leaderboard .kd .d{color:#ff9a9a}
 /* kill-feed sits UNDER the leaderboard on the right */
@@ -2566,13 +2568,27 @@ function renderLeaderboard(){
   const medal=['🥇','🥈','🥉'];
   const title=document.querySelector('#leaderboard h3');
   if(title)title.textContent='🏆 XẾP HẠNG ('+rows.length+'/'+MAX_PLAYERS+')';
-  document.getElementById('lb-list').innerHTML=rows.map((r,i)=>
-    '<div class="lb-row'+(r.me?' me':'')+(r.dead?' dead':'')+'">'+
+  document.getElementById('lb-list').innerHTML=rows.map((r,i)=>{
+    const rk=rankTitle(r.k);                 // danh hiệu theo số hạ gục
+    // người đứng đầu (còn sống & có kill) được thêm huy hiệu "Vua sàn đấu"
+    const top=(i===0&&r.k>0)?' <b class="crown">👑 Vua sàn đấu</b>':'';
+    return '<div class="lb-row'+(r.me?' me':'')+(r.dead?' dead':'')+'">'+
       '<span class="rk">'+(medal[i]||(i+1))+'</span>'+
-      '<span class="who">'+escapeHtml(r.name)+' <small>Lv.'+r.lvl+'</small>'+(r.waiting?' ⏳':(r.dead?' 💀':''))+'</span>'+
+      '<span class="who">'+escapeHtml(r.name)+' <small>Lv.'+r.lvl+'</small>'+(r.waiting?' ⏳':(r.dead?' 💀':''))+
+        '<span class="title" style="color:'+rk.color+'">'+rk.icon+' '+rk.name+top+'</span></span>'+
       '<span class="kd"><span class="k">'+r.k+'</span>/<span class="d">'+r.d+'</span></span>'+
-    '</div>'
-  ).join('');
+    '</div>';
+  }).join('');
+}
+// ---- danh hiệu theo số lần hạ gục (kills) ----
+function rankTitle(k){
+  if(k>=30)return {name:'Huyền Thoại',icon:'🐉',color:'#ff5ec7'};
+  if(k>=20)return {name:'Bá Vương',   icon:'🔱',color:'#ff8a3c'};
+  if(k>=12)return {name:'Cao Thủ',    icon:'💪',color:'#ffd36b'};
+  if(k>=7) return {name:'Kiếm Khách',  icon:'🔥',color:'#ff7a5a'};
+  if(k>=4) return {name:'Chiến Binh',  icon:'⚔️',color:'#9fe0ff'};
+  if(k>=1) return {name:'Tiều Phu',    icon:'🪓',color:'#a8d68a'};
+  return {name:'Tân Binh',icon:'🌱',color:'#9fb3c8'};
 }
 function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
