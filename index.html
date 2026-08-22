@@ -288,7 +288,7 @@ canvas{display:block}
   <div class="note" id="mp-net-note" style="margin-top:8px">⚠️ Đang dùng kết nối P2P (PeerJS). Nếu khác mạng khó vào, có thể cắm server Cloudflare (xem README) để ổn định hơn.</div>
 </div>
 <div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="auto-atk-btn">🤖 Auto đánh</button><button id="auto-run-btn">🏃 Auto vận+đánh</button><button id="weapon-btn">🗡️ Vũ khí</button><button id="cos-btn">✨ Ngoại hình</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
-<div id="credit">⚡ Tạo bởi DeepSeek Harness · Skybox “Forest Clearing 1” © Luis Vidal (CC-BY-4.0)</div>
+<div id="credit">⚡ Tạo bởi DeepSeek Harness · Skybox “Forest Clearing 1” © Luis Vidal · Aura “Super Sonic Stomp” © Accountnamed334 (CC-BY-4.0)</div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
@@ -1370,6 +1370,7 @@ const COSMETICS=[
   {id:'flame',  name:'Hào Quang Lửa Rồng',   icon:'🔥', kind:'aura',  color:0xff5a1e},
   {id:'frost',  name:'Hào Quang Băng Giá',   icon:'❄️', kind:'aura',  color:0x7fe0ff},
   {id:'void',   name:'Hào Quang Hắc Ám',     icon:'🌌', kind:'aura',  color:0xb46cff},
+  {id:'sonic',  name:'Hào Quang Siêu Tốc',   icon:'⚡', kind:'auraModel', model:'sonic-rangers-super-sonic-stomp-aura.glb', color:0x8fe0ff},
   {id:'crown',  name:'Vương Miện Bạo Chúa',  icon:'👑', kind:'crown', color:0xffd23c},
   {id:'wings',  name:'Đôi Cánh Ánh Sáng',    icon:'🕊️', kind:'wings', color:0xcfe8ff},
 ];
@@ -1383,6 +1384,35 @@ cosHalo.rotation.x=Math.PI/2;cosHalo.position.y=1.5;cosHalo.visible=!1;guy.add(c
 const cosAura=new T.Sprite(new T.SpriteMaterial({map:auraTex,color:0xff5a1e,transparent:!0,opacity:0,blending:T.AdditiveBlending,depthWrite:!1}));
 cosAura.scale.set(2.7,3.6,1);cosAura.position.y=0.9;cosAura.visible=!1;guy.add(cosAura);
 const cosAuraLight=new T.PointLight(0xff5a1e,0,6);cosAuraLight.position.set(0,1,0);guy.add(cosAuraLight);
+// ⚡ hào quang MODEL (GLB Super Sonic Stomp Aura) — tải một lần, gắn vào guy
+const cosAuraModel=new T.Group();cosAuraModel.position.y=0.9;cosAuraModel.visible=!1;guy.add(cosAuraModel);
+let _auraProto=null;                 // scene mẫu đã tải (để clone cho đối thủ)
+const _auraProtoCbs=[];              // callback chờ tải xong (dựng cho remote)
+function fitAuraModel(obj){          // căn model về ~cao 3 đơn vị, tâm quanh gốc
+  const box=new T.Box3().setFromObject(obj);const sz=new T.Vector3();box.getSize(sz);
+  const h=Math.max(sz.x,sz.y,sz.z)||1;const s=3.0/h;obj.scale.setScalar(s);
+  const c=new T.Vector3();box.getCenter(c);obj.position.set(-c.x*s,-c.y*s,-c.z*s);
+}
+(function loadAuraModel(){
+  if(typeof GLTFLoader==='undefined')return;
+  new GLTFLoader().load('sonic-rangers-super-sonic-stomp-aura.glb',gltf=>{
+    _auraProto=gltf.scene;
+    // gắn bản cho guy
+    const mine=_auraProto.clone(!0);
+    mine.traverse(o=>{if(o.isMesh&&o.material){o.castShadow=!1;o.material=o.material.clone();o.material.transparent=!0;o.material.depthWrite=!1;o.material.blending=T.AdditiveBlending;o.frustumCulled=!1}});
+    fitAuraModel(mine);cosAuraModel.add(mine);
+    if(currentCos()&&currentCos().kind==='auraModel')refreshCosmeticMeshes();
+    // giải phóng các callback remote đang chờ
+    while(_auraProtoCbs.length)_auraProtoCbs.shift()();
+  },undefined,err=>console.warn('Không tải được hào quang Sonic GLB.',err));
+})();
+// tạo một bản aura-model để gắn vào 1 avatar bất kỳ (guy đối thủ); trả về group (rỗng nếu chưa tải xong, sẽ tự thêm khi xong)
+function buildAuraModelInstance(){
+  const holder=new T.Group();
+  const build=()=>{if(!_auraProto)return;const m=_auraProto.clone(!0);m.traverse(o=>{if(o.isMesh&&o.material){o.castShadow=!1;o.material=o.material.clone();o.material.transparent=!0;o.material.depthWrite=!1;o.material.blending=T.AdditiveBlending;o.frustumCulled=!1}});fitAuraModel(m);holder.add(m)};
+  if(_auraProto)build();else _auraProtoCbs.push(build);
+  return holder;
+}
 // vương miện vàng
 const cosCrown=new T.Group();cosCrown.position.y=1.34;cosCrown.visible=!1;guy.add(cosCrown);
 (function(){const band=new T.Mesh(new T.CylinderGeometry(.17,.19,.09,12,1,!0),new T.MeshStandardMaterial({color:0xffd23c,metalness:.9,roughness:.25,emissive:0x5a4200,emissiveIntensity:.5,side:T.DoubleSide}));cosCrown.add(band);
@@ -1401,8 +1431,10 @@ function refreshCosmeticMeshes(){
   cosWings.visible=!!(c&&c.kind==='wings');
   const auraOn=!!(c&&c.kind==='aura');
   cosAura.visible=auraOn;
+  cosAuraModel.visible=!!(c&&c.kind==='auraModel');   // ⚡ hào quang Sonic (GLB)
   if(auraOn){cosAura.material.color.setHex(c.color);cosAuraLight.color.setHex(c.color)}
-  cosAuraLight.intensity=auraOn?1.6:0;
+  cosAuraLight.intensity=(auraOn||(c&&c.kind==='auraModel'))?1.6:0;
+  if(c&&c.kind==='auraModel')cosAuraLight.color.setHex(c.color);
   if(c&&c.kind==='halo')cosHalo.material.color.setHex(c.color);
 }
 function equipCosmetic(id){
@@ -1429,6 +1461,7 @@ function updateCosmetics(dt){
   if(cosHalo.visible){cosHalo.rotation.z+=dt*1.5;cosHalo.position.y=1.5+Math.sin(cosTime*2)*0.02;cosHalo.material.opacity=0.8+Math.sin(cosTime*4)*0.15}
   if(cosCrown.visible)cosCrown.rotation.y+=dt*0.6;
   if(cosAura.visible){const f=0.6+Math.sin(cosTime*10)*0.15;cosAura.material.opacity=0.5*f;cosAura.scale.set(2.6+Math.sin(cosTime*3)*.12,3.5+Math.sin(cosTime*2.4)*.16,1);cosAuraLight.intensity=1.4*f}
+  if(cosAuraModel.visible){cosAuraModel.rotation.y+=dt*2.4;const p=1+Math.sin(cosTime*6)*0.06;cosAuraModel.scale.setScalar(p);cosAuraLight.intensity=1.5+Math.sin(cosTime*9)*0.4}
   if(cosWings.visible){cosWings.children.forEach(w=>{w.rotation.y=w.userData.side*(0.7+Math.sin(cosTime*5)*0.35)})}
 }
 
@@ -1478,7 +1511,7 @@ function makeRemoteGuy(){
   const cWings=new T.Group();cWings.position.set(0,.75,-.18);cWings.visible=!1;g.add(cWings);
   [-1,1].forEach(s=>{const wing=new T.Mesh(new T.PlaneGeometry(.6,.9,1,1),new T.MeshBasicMaterial({color:0xcfe8ff,transparent:!0,opacity:.5,side:T.DoubleSide,blending:T.AdditiveBlending,depthWrite:!1}));wing.position.set(s*.34,.1,0);wing.rotation.y=s*.9;wing.userData.side=s;cWings.add(wing)});
   const handle={grp:g,rArm:ra,lArm:la,axe:rax,laxe:laxeR,nameSpr,hpFg,head:h,shirtMat:rShirt,hatMat:rHat,
-    cHalo,cAura,cCrown,cWings,cos:null,cosT:Math.random()*6,
+    cHalo,cAura,cCrown,cWings,cAuraModel:null,cos:null,cosT:Math.random()*6,
     setColor(hex){rShirt.color.setHex(hex);rHat.color.setHex((hex&0xfefefe)>>1)},
     setLabel(txt){nameSpr.material.map=makeLabelTex(txt);nameSpr.material.needsUpdate=!0},
     setCosmetic(id){
@@ -1487,6 +1520,10 @@ function makeRemoteGuy(){
       cCrown.visible=!!(c&&c.kind==='crown');
       cWings.visible=!!(c&&c.kind==='wings');
       const auraOn=!!(c&&c.kind==='aura');cAura.visible=auraOn;if(auraOn)cAura.material.color.setHex(c.color);
+      // ⚡ hào quang model (GLB): dựng lười lần đầu cần, rồi bật/tắt
+      const modelOn=!!(c&&c.kind==='auraModel');
+      if(modelOn&&!this.cAuraModel){this.cAuraModel=buildAuraModelInstance();this.cAuraModel.position.y=.9;g.add(this.cAuraModel)}
+      if(this.cAuraModel)this.cAuraModel.visible=modelOn;
     }};
   return handle;
 }
@@ -3817,6 +3854,7 @@ function updateRemote(dt){
       if(p.av.cCrown.visible)p.av.cCrown.rotation.y+=dt*.6;
       if(p.av.cAura.visible){const f=.6+Math.sin(p.av.cosT*10)*.15;p.av.cAura.material.opacity=.5*f}
       if(p.av.cWings.visible)p.av.cWings.children.forEach(w=>{w.rotation.y=w.userData.side*(.7+Math.sin(p.av.cosT*5)*.35)});
+      if(p.av.cAuraModel&&p.av.cAuraModel.visible){p.av.cAuraModel.rotation.y+=dt*2.4;const pp=1+Math.sin(p.av.cosT*6)*.06;p.av.cAuraModel.scale.setScalar(pp)}
     }
     g.visible=!0;
   }

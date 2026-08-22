@@ -87,6 +87,7 @@ Lưu, đẩy lên GitHub Pages là xong — từ đó mọi phòng sẽ đi qua 
 ## 📜 Ghi công tài nguyên (Credits)
 
 - **Skybox** "[Forest Clearing 1 Ground Skybox](https://sketchfab.com/3d-models/forest-clearing-1-ground-skybox-a78ae6a11957401a83fd074004aafcc0)" của **Luis Vidal** ([Sketchfab](https://sketchfab.com/Luis_Vidal)) — giấy phép [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). File: `forest_clearing_1_ground_skybox.glb`.
+- **Hào quang** "[Sonic Rangers Super Sonic Stomp Aura](https://sketchfab.com/3d-models/sonic-rangers-super-sonic-stomp-aura-c7803ade990740818729b057c6b4da44)" của **Accountnamed334** ([Sketchfab](https://sketchfab.com/Accountnamed334)) — giấy phép [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). File: `sonic-rangers-super-sonic-stomp-aura.glb` (ngoại hình ✨ "Hào Quang Siêu Tốc").
 
 ---
 
