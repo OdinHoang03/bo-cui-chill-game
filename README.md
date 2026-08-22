@@ -84,6 +84,10 @@ Lưu, đẩy lên GitHub Pages là xong — từ đó mọi phòng sẽ đi qua 
 - [PeerJS](https://peerjs.com/) (WebRTC P2P) + tuỳ chọn **Cloudflare Workers + Durable Objects** (server WebSocket)
 - HTML/CSS/JS thuần, game gói trong một file `index.html` — không cần build
 
+## 📜 Ghi công tài nguyên (Credits)
+
+- **Skybox** "[Forest Clearing 1 Ground Skybox](https://sketchfab.com/3d-models/forest-clearing-1-ground-skybox-a78ae6a11957401a83fd074004aafcc0)" của **Luis Vidal** ([Sketchfab](https://sketchfab.com/Luis_Vidal)) — giấy phép [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). File: `forest_clearing_1_ground_skybox.glb`.
+
 ---
 
 ⚡ **Tạo bởi DeepSeek Harness**
