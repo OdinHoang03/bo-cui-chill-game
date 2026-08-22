@@ -191,7 +191,7 @@ canvas{display:block}
 <div id="pov-label" class="hidden">🎥 Người thứ 3</div>
 <div id="target-label" style="position:absolute;bottom:145px;left:50%;transform:translateX(-50%);color:#7fe0a0;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none"></div>
 <div id="charge-wrap"><div id="charge-bar"><div id="charge-fill"></div></div><div id="charge-label">TỤ LỰC</div></div>
-<div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • U: nâng cấp • E: kỹ năng vũ khí • F: bổ nhanh • Q/1-8: đổi góc • 🎁 Bổ củi lúc đánh nhau sẽ rơi vật phẩm!</div>
+<div id="hint">🖱️ Giữ chuột/Space để tụ lực rồi thả để bổ • WASD: di chuyển • U: nâng cấp • E: kỹ năng • F: bổ nhanh • G: auto đánh • H: auto vận+đánh • Q/1-8: đổi góc • 🎁 Bổ củi lúc đánh nhau sẽ rơi vật phẩm!</div>
 <div id="my-hp">
   <div class="row"><span class="nm" id="me-name" title="Bấm để đổi tên">Bạn</span><span class="lvl">Lv.<span id="me-lvl">1</span> · <span id="me-title">Tân Binh</span></span></div>
   <div class="hpbar" id="me-hpbar"><i id="me-hpfill"></i></div>
@@ -287,7 +287,7 @@ canvas{display:block}
   <div class="note" style="margin-top:10px">📖 <b>Cách chơi cùng bạn:</b><br>1. Một người bấm <b>Tạo phòng</b> → nhận <b>link mời</b> hoặc mã.<br>2. Gửi link/mã cho người kia (Zalo/Messenger…).<br>3. Người kia <b>bấm link</b> để vào thẳng, hoặc <b>Nhập mã</b> rồi bấm <b>Vào phòng</b>.<br>4. Kết nối xong sẽ thấy đối thủ — lại gần và vung rìu để đánh nhau!<br><span style="opacity:.8">⚠️ Khác WiFi/4G có thể mất ~10s để kết nối. Nếu mãi không vào được, một số WiFi trường/công ty chặn P2P — hãy thử chuyển sang <b>4G/5G</b>.</span></div>
   <div class="note" id="mp-net-note" style="margin-top:8px">⚠️ Đang dùng kết nối P2P (PeerJS). Nếu khác mạng khó vào, có thể cắm server Cloudflare (xem README) để ổn định hơn.</div>
 </div>
-<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="weapon-btn">🗡️ Vũ khí</button><button id="cos-btn">✨ Ngoại hình</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
+<div id="bottom-bar"><button id="chop-btn">🪓 Bổ ngay (F)</button><button id="auto-atk-btn">🤖 Auto đánh</button><button id="auto-run-btn">🏃 Auto vận+đánh</button><button id="weapon-btn">🗡️ Vũ khí</button><button id="cos-btn">✨ Ngoại hình</button><button id="upg-btn">🪵 Nâng cấp (U)</button><button id="name-btn">✏️ Tên</button><button id="mp-btn">⚔️ Chơi mạng</button><button id="pov-btn" class="active">🎥 Góc nhìn</button><button id="music-btn">🎵</button></div>
 <div id="credit">⚡ Tạo bởi DeepSeek Harness · Skybox “Forest Clearing 1” © Luis Vidal (CC-BY-4.0)</div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -1530,6 +1530,11 @@ const keys={};
 addEventListener('keydown',e=>{const a=document.activeElement;if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.isContentEditable))return;const k=e.key.toLowerCase();if('wasd'.includes(k)){keys[k]=1;e.preventDefault()}});
 addEventListener('keyup',e=>{const k=e.key.toLowerCase();if('wasd'.includes(k))keys[k]=0});
 let chopTarget={type:'log'};   // {type:'log'} or {type:'tree',tree}
+// ---- CHẾ ĐỘ TỰ ĐỘNG ----
+// auto='off' | 'atk' (đứng yên tự đánh mục tiêu trong tầm) | 'run' (tự chạy tới mục tiêu rồi đánh)
+let autoMode='off';
+// thông tin mục tiêu gần nhất (updatePlayer cập nhật mỗi khung) để logic auto dùng
+let autoInfo={enemyPos:null,enemyD:1e9,inRange:!1};
 
 // approximate world tip of the axe bit for crack placement
 const _tmp=new T.Vector3();
@@ -1941,6 +1946,51 @@ function tryChop(){
   chargeStored=0;St.canChop=!1;startChop();
   document.getElementById('hint').classList.add('hidden');
 }
+// ---- mục tiêu ưu tiên cho AUTO: đối thủ/boss gần nhất, nếu không có thì cây đốn được, cuối cùng là khúc gỗ giữa sân ----
+function nearestAutoTarget(){
+  const gx=guy.position.x, gz=guy.position.z;
+  let best=null,bd=1e9;
+  // đối thủ (chỉ khi chơi mạng)
+  if(netConnected()&&!Me.waiting){
+    for(const p of activePeers()){
+      if(p.st.dead)continue;
+      const d=Math.hypot(gx-p.av.grp.position.x,gz-p.av.grp.position.z);
+      if(d<bd){bd=d;best={x:p.av.grp.position.x,z:p.av.grp.position.z,d,reach:attackReach()+1.6,kind:'enemy'}}
+    }
+  }
+  // boss
+  if(Boss.active){
+    const d=Math.hypot(gx-Boss.grp.position.x,gz-Boss.grp.position.z)-1.2;
+    if(d<bd){bd=d;best={x:Boss.grp.position.x,z:Boss.grp.position.z,d,reach:attackReach()+2.4,kind:'boss'}}
+  }
+  if(best)return best;
+  // không có đối thủ → cây đốn được gần nhất
+  for(const tr of trees){
+    if(!tr.choppable||tr.dead)continue;
+    const d=Math.hypot(gx-tr.x,gz-tr.z);
+    if(d<bd){bd=d;best={x:tr.x,z:tr.z,d,reach:attackReach(),kind:'tree'}}
+  }
+  if(best)return best;
+  // cuối cùng: khúc gỗ trung tâm
+  return {x:0,z:0,d:Math.hypot(gx,gz),reach:attackReach(),kind:'log'};
+}
+// 🤖 vòng lặp tự động: tự bổ khi có mục tiêu trong tầm (auto đánh), hoặc tự chạy tới rồi bổ (auto vận + đánh)
+function updateAuto(dt){
+  if(autoMode==='off'||Me.dead||Me.waiting)return;
+  if(charging||St.isChopping||skillActive||skillAnim)return;   // đang bận thì thôi
+  const tgt=nearestAutoTarget();if(!tgt)return;
+  // chế độ 'atk' chỉ đánh khi mục tiêu đã ở trong tầm; 'run' được đi tới (updatePlayer lo di chuyển)
+  const inRange=tgt.d<=tgt.reach+0.15;
+  if(inRange&&St.canChop&&!St.isChopping)tryChop();
+}
+// bật/tắt chế độ tự động (mode: 'atk' | 'run'); bấm lại cùng nút = tắt
+function setAutoMode(mode){
+  autoMode=(autoMode===mode)?'off':mode;
+  const a=document.getElementById('auto-atk-btn'), r=document.getElementById('auto-run-btn');
+  if(a)a.classList.toggle('active',autoMode==='atk');
+  if(r)r.classList.toggle('active',autoMode==='run');
+  showFloat(autoMode==='off'?'⏹️ Tắt tự động':(autoMode==='atk'?'🤖 Tự động ĐÁNH bật':'🏃 Tự VẬN + ĐÁNH bật'),autoMode==='off'?'#bbb':'#7fe0a0');
+}
 // true when the user is typing into a text field / has a panel open
 function typingInField(){
   const a=document.activeElement;
@@ -1979,6 +2029,8 @@ addEventListener('keydown',e=>{
   else if(e.key==='e'||e.key==='E'){if(!e.repeat)useSkill()} // E = kỹ năng tấn công
   else if(e.key==='r'||e.key==='R'){if(!e.repeat)useSkill2()} // R = kỹ năng phòng thủ/khống chế
   else if(e.key==='q'||e.key==='Q'){cyclePOV()}
+  else if(e.key==='g'||e.key==='G'){if(!e.repeat)setAutoMode('atk')} // G = bật/tắt auto đánh
+  else if(e.key==='h'||e.key==='H'){if(!e.repeat)setAutoMode('run')} // H = bật/tắt auto vận + đánh
   else if(e.key>='1'&&e.key<='8'){povMode=(+e.key)-1;showPovLabel()}
   else if(e.key==='ArrowLeft'){povMode=7;orbitYaw+=0.15;showPovLabel()}
   else if(e.key==='ArrowRight'){povMode=7;orbitYaw-=0.15;showPovLabel()}
@@ -1992,6 +2044,8 @@ addEventListener('touchstart',e=>{if(e.target.closest('#bottom-bar')||e.target.c
 
 // "Bổ ngay" button → instant chop with no charge
 document.getElementById('chop-btn').addEventListener('click',()=>tryChop());
+document.getElementById('auto-atk-btn').addEventListener('click',()=>setAutoMode('atk'));
+document.getElementById('auto-run-btn').addEventListener('click',()=>setAutoMode('run'));
 document.getElementById('pov-btn').addEventListener('click',cyclePOV);
 document.getElementById('music-btn').addEventListener('click',()=>{const on=audio.toggle();const b=document.getElementById('music-btn');b.classList.toggle('off',!on);b.textContent=on?'🎵':'🔇'});
 
@@ -3785,6 +3839,15 @@ function updatePlayer(dt,time){
     mx+=_fwd.x*joy.y+right.x*joy.x;
     mz+=_fwd.z*joy.y+right.z*joy.x;
   }
+  // 🏃 AUTO VẬN + ĐÁNH: nếu không có input tay & chưa ở trong tầm, tự đi tới mục tiêu gần nhất
+  let autoSteer=null;
+  if(autoMode==='run'&&!Me.dead&&!Me.waiting&&!(mx||mz)){
+    const tgt=nearestAutoTarget();
+    if(tgt&&tgt.d>tgt.reach*0.9){                 // còn xa → tiến lại gần
+      const dx=tgt.x-guy.position.x, dz=tgt.z-guy.position.z, dl=Math.hypot(dx,dz)||1;
+      autoSteer=[dx/dl,dz/dl];mx=autoSteer[0];mz=autoSteer[1];
+    }
+  }
   const moving=(mx||mz)&&!St.isChopping&&!Me.dead;
   if(moving){
     const l=Math.hypot(mx,mz);mx/=l;mz/=l;
@@ -3829,6 +3892,7 @@ function updatePlayer(dt,time){
     if(d<enemyD){enemyD=d;enemyName='🦖 Khủng Long';enemyHp=Boss.hp;enemyPos=Boss.grp.position}
   }
   const enemyInRange=enemyD<=attackReach()+2.2&&enemyPos;
+  autoInfo={enemyPos,enemyD,inRange:!!enemyInRange};   // lưu cho logic auto trong loop
   // when idle & not chopping, face the enemy if close, else the wood target
   if(!moving&&!St.isChopping){
     let ang;
@@ -3865,6 +3929,7 @@ function loop(){
   for(const cl of farClouds){cl.userData.ang+=cl.userData.spin*dt*60;cl.position.set(Math.cos(cl.userData.ang)*cl.userData.rad,cl.userData.y,Math.sin(cl.userData.ang)*cl.userData.rad)}
 
   updatePlayer(dt,time);
+  updateAuto(dt);                           // 🤖 chế độ tự đánh / tự vận + đánh
   updateCharge(dt);
   updateChop(dt);
   regen(dt);
