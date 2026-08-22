@@ -413,9 +413,64 @@ let skillActive=null;                   // {id, t, dur} khi skill đang chạy
 
 // ============== RENDERER + SCENE ==============
 const sc=new T.Scene();
-sc.background=new T.Color(0x87CEEB);
-sc.fog=new T.Fog(0x9fc7e8,42,150);   // sương xa hơn để nhìn thấy phối cảnh nền (rừng thông + núi)
-const cam=new T.PerspectiveCamera(50,innerWidth/innerHeight,.1,400);
+sc.fog=new T.Fog(0x9fc7e8,42,160);   // màu sương khớp chân trời của skybox
+const cam=new T.PerspectiveCamera(50,innerWidth/innerHeight,.1,600);
+
+// ---- PANORAMA / SKYBOX: vòm trời gradient thủ tục (không phụ thuộc ảnh ngoài) ----
+// Vẽ canvas dọc: xanh sâu trên đỉnh → nhạt dần xuống chân trời + đĩa mặt trời có
+// quầng sáng, rồi bọc lên mặt trong một quả cầu lớn (BackSide). Vòm bám theo
+// camera nên luôn ở "vô cực". Màu chân trời trùng màu fog để hoà liền với núi xa.
+function makeSkyTexture(){
+  const c=document.createElement('canvas');c.width=64;c.height=512;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,512);
+  g.addColorStop(0.00,'#2a6fc4');   // đỉnh trời xanh sâu
+  g.addColorStop(0.35,'#5aa0dd');
+  g.addColorStop(0.62,'#9fc7e8');   // gần chân trời (khớp fog)
+  g.addColorStop(0.80,'#cfe6f2');
+  g.addColorStop(1.00,'#e9f4f7');   // sát chân trời hơi trắng sương
+  x.fillStyle=g;x.fillRect(0,0,64,512);
+  const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;t.magFilter=T.LinearFilter;
+  return t;
+}
+const skyDome=new T.Mesh(
+  new T.SphereGeometry(500,32,16),
+  new T.MeshBasicMaterial({map:makeSkyTexture(),side:T.BackSide,fog:!1,depthWrite:!1})
+);
+skyDome.renderOrder=-1;
+sc.add(skyDome);
+// ---- Skybox thật (GLB baked panorama rừng — Forest Clearing 1, CC-BY-4.0 Luis Vidal) ----
+// GLB là một quả cầu bán kính ~30 với texture unlit bọc mặt trong. Ta phóng to để
+// bao trọn cảnh, tắt fog/độ ghi sâu, và cho bám theo camera (luôn ở "vô cực").
+// Nếu tải lỗi → giữ nguyên vòm gradient thủ tục ở trên làm dự phòng.
+let skyReal=null;
+(function loadSkyboxGLB(){
+  if(typeof GLTFLoader==='undefined')return;
+  new GLTFLoader().load('forest_clearing_1_ground_skybox.glb',gltf=>{
+    const g=gltf.scene;
+    g.scale.setScalar(16);                 // r30 * 16 ≈ 480, khớp far-plane 600
+    g.traverse(o=>{if(o.isMesh&&o.material){
+      o.material.fog=!1;o.material.depthWrite=!1;o.material.side=T.BackSide;
+      o.frustumCulled=!1;o.renderOrder=-1;o.castShadow=!1;o.receiveShadow=!1;
+      if(o.material.map)o.material.map.colorSpace=T.SRGBColorSpace;
+    }});
+    skyReal=g;sc.add(g);
+    skyDome.visible=!1;sunSprite.visible=!1;  // đã có skybox thật → ẩn vòm gradient + mặt trời vẽ tay
+  },undefined,err=>{console.warn('Không tải được skybox GLB, dùng vòm gradient dự phòng.',err)});
+})();
+// mặt trời (đĩa sáng + quầng) đặt cùng hướng ánh nắng chính
+const sunSprite=(()=>{
+  const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d');
+  const gr=x.createRadialGradient(64,64,4,64,64,64);
+  gr.addColorStop(0,'rgba(255,250,235,1)');gr.addColorStop(.18,'rgba(255,244,210,.95)');
+  gr.addColorStop(.45,'rgba(255,230,170,.35)');gr.addColorStop(1,'rgba(255,230,170,0)');
+  x.fillStyle=gr;x.beginPath();x.arc(64,64,64,0,Math.PI*2);x.fill();
+  const tex=new T.CanvasTexture(c);tex.colorSpace=T.SRGBColorSpace;
+  const sp=new T.Sprite(new T.SpriteMaterial({map:tex,transparent:!0,depthWrite:!1,depthTest:!1,fog:!1,blending:T.AdditiveBlending}));
+  sp.scale.setScalar(120);sp.renderOrder=-1;return sp;
+})();
+sunSprite.position.set(160,180,110);   // ~cùng phía với DirectionalLight bên dưới
+sc.add(sunSprite);
+
 const ren=new T.WebGLRenderer({antialias:!0});
 ren.setSize(innerWidth,innerHeight);
 ren.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -3800,6 +3855,11 @@ function loop(){
 
   // idle head bob
   head.position.y=1.12+Math.sin(time*.9)*.006;
+
+  // skybox bám theo camera → luôn ở "vô cực" (chỉ dời vị trí, không xoay)
+  const cp=cam.position;
+  if(skyReal)skyReal.position.set(cp.x,cp.y,cp.z);
+  skyDome.position.set(cp.x,cp.y,cp.z);
 
   // mây phối cảnh xa trôi chậm quanh chân trời
   for(const cl of farClouds){cl.userData.ang+=cl.userData.spin*dt*60;cl.position.set(Math.cos(cl.userData.ang)*cl.userData.rad,cl.userData.y,Math.sin(cl.userData.ang)*cl.userData.rad)}
